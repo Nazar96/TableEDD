@@ -1,8 +1,10 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import numpy as np
+from data.pubtabnet import PubTabNet
 
 
 class TableAttention(pl.LightningModule):
@@ -82,6 +84,14 @@ class TableAttention(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
+
+    def train_dataloader(self):
+        ptn_dataset = PubTabNet(
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
+            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
+        )
+        return DataLoader(ptn_dataset, batch_size=8, shuffle=True)
 
 
 class AttentionGRU(nn.Module):
