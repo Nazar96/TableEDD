@@ -72,6 +72,8 @@ class PubTabNetLabelEncode:
 
         data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], [0., 0., 0., 0.])
         data['tag_idxs'] = self.pad_sequence(data['tag_idxs'], self.dict_elem['eos'])
+
+        data['tag_idxs'] = self.one_hot(data['tag_idxs'])
         return data
 
 
