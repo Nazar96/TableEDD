@@ -1,10 +1,11 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import pytorch_lightning as pl
 import numpy as np
 
 
-class TableAttention(nn.Module):
+class TableAttention(pl.LightningModule):
     def __init__(
             self,
             input_channels: int,
@@ -49,7 +50,7 @@ class TableAttention(nn.Module):
         loc_preds = torch.sigmoid(loc_preds)
         return loc_preds
 
-    def forward(self, tensor, targets=None):
+    def forward(self, tensor):
         tensor = self.__flatten(tensor)
         batch_size = tensor.shape[0]
         hidden = torch.zeros((1, batch_size, self.hidden_size))
@@ -67,6 +68,20 @@ class TableAttention(nn.Module):
         structure_prob = self.generate_structure(rnn_outputs)
         loc_pred = self.generate_loc(rnn_outputs)
         return structure_prob, loc_pred
+
+    def training_step(self, batch, batch_idx):
+        image, (gt_struct, gt_bbox) = batch
+        pred_struct, pred_bbox = self.forward(image)
+        loss_bbox = F.mse_loss(pred_bbox, gt_bbox)
+        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
+        self.log('train bbox loss', loss_bbox)
+        self.log('train struct loss', loss_struct)
+        loss = loss_bbox + loss_struct
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
 
 
 class AttentionGRU(nn.Module):
