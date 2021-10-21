@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 import pytorch_lightning as pl
+import albumentations as A
 import jsonlines
 import cv2
 
@@ -8,8 +9,10 @@ class PubTabNetLabelEncode:
     def __init__(
             self,
             elem_dict_path,
+            max_elements = 1000,
     ):
         self.elements = self.load_elements(elem_dict_path)
+        self.max_elements = max_elements
         self.dict_elem = {}
         for i, elem in enumerate(self.elements):
             self.dict_elem[elem] = i
@@ -64,7 +67,10 @@ class PubTabNet(Dataset):
         with jsonlines.open(annotation_file, 'r') as reader:
             self.labels = list(reader)
         self.img_dir = img_dir
-        self.transform = transform
+        self.transform = A.Compose([
+                            A.PadIfNeeded(256, 256),
+                            A.RandomCrop(256, 256)
+                        ])
         self.target_transform = target_transform
         self.label_encode = PubTabNetLabelEncode(elem_dict_path)
 
@@ -77,13 +83,15 @@ class PubTabNet(Dataset):
         image = self.read_image(filename)
         tokens = data['html']['structure']['tokens'].copy()
         bboxs = [c['bbox'] for c in data['html']['cells']]
+        
+        image = self.transform(image=image)["image"]
         result = {
             'image': image,
             'tokens': tokens,
             'bboxs': bboxs,
         }
         result = self.label_encode(result)
-        return result
+        return result['image'], (result['tag_idxs'], result['tag_bboxs'])
 
     def read_image(self, img_name):
         image = cv2.imread(self.img_dir + img_name)
