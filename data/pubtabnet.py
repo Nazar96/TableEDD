@@ -6,6 +6,7 @@ import albumentations as A
 import jsonlines
 import cv2
 from copy import copy
+import numpy as np
 
 
 class PubTabNetLabelEncode:
@@ -60,7 +61,7 @@ class PubTabNetLabelEncode:
         for _ in range(self.max_elements - size):
             sequence.append(copy(pad_value))
 
-        return sequence
+        return np.asarray(sequence)
 
     def one_hot(self, inputs):
         return F.one_hot(inputs.type(torch.int64), len(self.elements))
