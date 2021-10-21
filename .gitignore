@@ -1,7 +1,6 @@
 .idea/
 .vscode/
 recdoc/
-data/
 resources/*
 modules/
 configurations/*
