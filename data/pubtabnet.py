@@ -18,13 +18,13 @@ class PubTabNetLabelEncode:
     def load_elements(path):
         with open(path, 'r') as file:
             data = file.readlines()
-        data = [d.replace('/n', '') for d in data]
+        data = [d.replace('\n', '') for d in data]
         data = ['sos'] + data + ['eos']
         return data
 
     def index_encode(self, seq):
         _seq = ['sos'] + seq + ['eos']
-        result = [self.dict_elem[elem] for elem in _seq]
+        result = [self.dict_elem[elem.strip()] for elem in _seq]
         return result
 
     def get_bbox_for_each_tag(self, data):
