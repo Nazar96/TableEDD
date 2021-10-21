@@ -1,4 +1,6 @@
+import torch
 from torch.utils.data import Dataset, DataLoader
+from torch.nn import functional as F
 import pytorch_lightning as pl
 import albumentations as A
 import jsonlines
@@ -57,7 +59,11 @@ class PubTabNetLabelEncode:
 
         for _ in range(self.max_elements - size):
             sequence.append(copy(pad_value))
+
         return sequence
+
+    def one_hot(self, inputs):
+        return F.one_hot(inputs.type(torch.int64), len(self.elements))
 
     def __call__(self, data):
         data['tag_idxs'] = self.index_encode(data['tokens'])
