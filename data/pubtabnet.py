@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 import albumentations as A
 import jsonlines
 import cv2
+from copy import copy
 
 
 class PubTabNetLabelEncode:
@@ -49,9 +50,21 @@ class PubTabNetLabelEncode:
                 result.append([0., 0., 0., 0.])
         return result
 
+    def pad_sequence(self, sequence, pad_value):
+        size = len(sequence)
+        if size >= self.max_elements:
+            return sequence[:self.max_elements]
+
+        for _ in range(self.max_elements - size):
+            sequence.append(copy(pad_value))
+        return sequence
+
     def __call__(self, data):
         data['tag_idxs'] = self.index_encode(data['tokens'])
         data['tag_bboxs'] = self.get_bbox_for_each_tag(data)
+
+        data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], [0., 0., 0., 0.])
+        data['tag_idxs'] = self.pad_sequence(data['tag_idxs'], self.dict_elem['eos'])
         return data
 
 
