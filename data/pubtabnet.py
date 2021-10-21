@@ -6,6 +6,7 @@ import albumentations as A
 import jsonlines
 import cv2
 from copy import copy
+import numpy as np
 
 
 class PubTabNetLabelEncode:
@@ -33,7 +34,7 @@ class PubTabNetLabelEncode:
         result = [self.dict_elem[elem.strip()] for elem in _seq]
         return result
 
-    def get_bbox_for_each_tag(self, data):
+    def get_bbox_for_each_tag(self, data, pad_value):
         image = data['image']
         bboxs = data['bboxs']
         tag_idxs = data['tag_idxs']
@@ -45,11 +46,11 @@ class PubTabNetLabelEncode:
         for tag_idx in tag_idxs:
             if tag_idx == td_idx:
                 x0, y0, x1, y1 = bboxs[bbox_idx]
-                new_bbox = (x0 / width, y0 / height, x1 / width, y1 / height)
-                result.append(new_bbox)
+#                 new_bbox = (float(x0, float(y0), float(x1), float(y1))
+                result.append(bboxs[bbox_idx])
                 bbox_idx += 1
             else:
-                result.append([0., 0., 0., 0.])
+                result.append(copy(pad_value))
         return result
 
     def pad_sequence(self, sequence, pad_value):
@@ -60,16 +61,21 @@ class PubTabNetLabelEncode:
         for _ in range(self.max_elements - size):
             sequence.append(copy(pad_value))
 
-        return torch.tensor(sequence)
+        return np.asarray(sequence)
 
     def one_hot(self, inputs):
-        return F.one_hot(inputs.type(torch.int64), len(self.elements))
+        inputs = np.asarray(inputs)
+        mask = np.zeros((inputs.size, inputs.max()+1))
+        mask[np.arange(inputs.size), inputs] = 1
+        return mask 
 
     def __call__(self, data):
+        pad_value = [0., 0., 0.1, 0.1]
+        
         data['tag_idxs'] = self.index_encode(data['tokens'])
-        data['tag_bboxs'] = self.get_bbox_for_each_tag(data)
+        data['tag_bboxs'] = self.get_bbox_for_each_tag(data, pad_value)
 
-        data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], [0., 0., 0., 0.])
+        data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], pad_value)
         data['tag_idxs'] = self.pad_sequence(data['tag_idxs'], self.dict_elem['eos'])
 
         data['tag_idxs'] = self.one_hot(data['tag_idxs'])
@@ -89,9 +95,9 @@ class PubTabNet(Dataset):
             self.labels = list(reader)
         self.img_dir = img_dir
         self.transform = A.Compose([
-                            A.PadIfNeeded(256, 256),
-                            A.RandomCrop(256, 256)
-                        ])
+                            A.PadIfNeeded(256, 256, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
+                            A.Resize(512, 512),
+                        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['category_ids']))
         self.target_transform = target_transform
         self.label_encode = PubTabNetLabelEncode(elem_dict_path)
 
@@ -105,13 +111,16 @@ class PubTabNet(Dataset):
         tokens = data['html']['structure']['tokens'].copy()
         bboxs = [c['bbox'] for c in data['html']['cells']]
         
-        image = self.transform(image=image)["image"]
         result = {
             'image': image,
             'tokens': tokens,
             'bboxs': bboxs,
         }
         result = self.label_encode(result)
+        category_ids = np.zeros(len(result['tag_bboxs']))
+        transformed = self.transform(image=result['image'], bboxes=result['tag_bboxs'], category_ids=category_ids)
+        result['image'] = np.rollaxis(transformed['image'], 2, 0)/255
+        result['tag_bboxs'] = torch.tensor(transformed['bboxes'])
         return result['image'], (result['tag_idxs'], result['tag_bboxs'])
 
     def read_image(self, img_name):
