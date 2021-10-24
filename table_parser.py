@@ -6,6 +6,7 @@ from architecture.head.TableAttention import TableAttention
 from torchvision.models import mobilenet_v3_small
 import pytorch_lightning as pl
 from data.pubtabnet import PubTabNet
+from utils.utils import collate_fn
 
 
 def remove_layers(model, i):
@@ -25,9 +26,9 @@ class TableEDD(pl.LightningModule):
             max_elem_length,
         )
 
-    def forward(self, tensor):
-        emb = self.backbone(tensor)
-        result = self.head(emb)
+    def forward(self, input, target=None):
+        emb = self.backbone(input)
+        result = self.head(emb, target)
         return result
 
     def training_step(self, batch, batch_idx):
@@ -44,10 +45,10 @@ class TableEDD(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-#     def train_dataloader(self):
-#         ptn_dataset = PubTabNet(
-#             '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
-#             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
-#             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
-#         )
-#         return DataLoader(ptn_dataset, batch_size=8, shuffle=True)
+    def train_dataloader(self):
+        ptn_dataset = PubTabNet(
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
+            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
+        )
+        return DataLoader(ptn_dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)

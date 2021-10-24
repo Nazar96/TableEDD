@@ -13,10 +13,12 @@ class PubTabNetLabelEncode:
     def __init__(
             self,
             elem_dict_path,
-            max_elements = 1000,
+            max_elements=1000,
+            pad_sequence=False
     ):
         self.elements = self.load_elements(elem_dict_path)
         self.max_elements = max_elements
+        self.pad = pad_sequence
         self.dict_elem = {}
         for i, elem in enumerate(self.elements):
             self.dict_elem[elem] = i
@@ -45,8 +47,8 @@ class PubTabNetLabelEncode:
         result = []
         for tag_idx in tag_idxs:
             if tag_idx == td_idx:
-                x0, y0, x1, y1 = bboxs[bbox_idx]
-#                 new_bbox = (float(x0, float(y0), float(x1), float(y1))
+                # x0, y0, x1, y1 = bboxs[bbox_idx]
+                # new_bbox = (float(x0, float(y0), float(x1), float(y1))
                 result.append(bboxs[bbox_idx])
                 bbox_idx += 1
             else:
@@ -75,8 +77,9 @@ class PubTabNetLabelEncode:
         data['tag_idxs'] = self.index_encode(data['tokens'])
         data['tag_bboxs'] = self.get_bbox_for_each_tag(data, pad_value)
 
-        data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], pad_value)
-        data['tag_idxs'] = self.pad_sequence(data['tag_idxs'], self.dict_elem['eos'])
+        if self.pad:
+            data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], pad_value)
+            data['tag_idxs'] = self.pad_sequence(data['tag_idxs'], self.dict_elem['eos'])
 
         data['tag_idxs'] = self.one_hot(data['tag_idxs'])
         return data

@@ -58,17 +58,19 @@ class TableAttention(nn.Module):
         rnn_outputs = []
         if target is not None:
             # use_teacher_forcing
+            element_ohe = F.one_hot(element, self.elem_num)
             for i in range(len(target)):
                 output, hidden, alpha = self.structure_attention(
-                    element, hidden, input
+                    element_ohe, hidden, input
                 )
-                element = target[i]
+                element_ohe = target[i]
                 rnn_outputs.append(output)
 
         else:
             for _ in range(self.max_elem_length):
+                element_ohe = F.one_hot(element, self.elem_num)
                 output, hidden, alpha = self.structure_attention(
-                    element, hidden, input
+                    element_ohe, hidden, input
                 )
                 element = self.get_elements(torch.squeeze(output, dim=1)).detach()
                 rnn_outputs.append(output)
@@ -91,11 +93,8 @@ class AttentionGRU(nn.Module):
         self.h2h = nn.Linear(hidden_size, hidden_size)
         self.score = nn.Linear(hidden_size, 1, bias=False)
         self.rnn = nn.GRU(input_size+num_embeddings, hidden_size, batch_first=True)
-        self.embedding = nn.Embedding(num_embeddings)
 
     def forward(self, input, hidden, encoder_output):
-        input = self.embedding(input)
-
         input_proj = self.i2h(encoder_output)
         h0_proj = self.h2h(hidden)
         h0_proj = torch.transpose(h0_proj, dim0=1, dim1=0)
