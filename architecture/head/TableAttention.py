@@ -56,19 +56,20 @@ class TableAttention(nn.Module):
         element = torch.zeros(batch_size).to(device)
 
         rnn_outputs = []
-        if target is not None:
+        if self.training and target is not None:
             # use_teacher_forcing
-            element_ohe = F.one_hot(element, self.elem_num)
-            for i in range(len(target)):
+            element_ohe = F.one_hot(element.long(), self.elem_num)
+            sequence_length = len(target[0])
+            for i in range(sequence_length):
                 output, hidden, alpha = self.structure_attention(
                     element_ohe, hidden, input
                 )
-                element_ohe = target[i]
+                element_ohe = target[:, i]
                 rnn_outputs.append(output)
 
         else:
             for _ in range(self.max_elem_length):
-                element_ohe = F.one_hot(element, self.elem_num)
+                element_ohe = F.one_hot(element.long(), self.elem_num)
                 output, hidden, alpha = self.structure_attention(
                     element_ohe, hidden, input
                 )

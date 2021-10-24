@@ -14,8 +14,9 @@ def remove_layers(model, i):
 
 
 class TableEDD(pl.LightningModule):
-    def __init__(self, hidden_size, elem_num, max_elem_length, pretrained=False):
+    def __init__(self, hidden_size, elem_num, max_elem_length, pretrained=False, batch_size=8):
         super().__init__()
+        self.batch_size = batch_size
         self.backbone = remove_layers(mobilenet_v3_small(pretrained=pretrained), 0)
         attn_in_channels = self.backbone[-1].out_channels
 
@@ -33,12 +34,13 @@ class TableEDD(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         image, (gt_struct, gt_bbox) = batch
-        pred_struct, pred_bbox = self.forward(image)
+        pred_struct, pred_bbox = self.forward(image, gt_struct)
         loss_bbox = F.mse_loss(pred_bbox, gt_bbox)
-        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
+        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct) * 10_000
         self.log('train bbox loss', loss_bbox)
         self.log('train struct loss', loss_struct)
         loss = loss_bbox + loss_struct
+        print(loss_bbox.item(), loss_struct.item())
         return loss
 
     def configure_optimizers(self):
@@ -51,4 +53,4 @@ class TableEDD(pl.LightningModule):
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
-        return DataLoader(ptn_dataset, batch_size=8, shuffle=True, collate_fn=collate_fn)
+        return DataLoader(ptn_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn)
