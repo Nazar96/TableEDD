@@ -119,9 +119,10 @@ class PubTabNet(Dataset):
         result = self.label_encode(result)
         category_ids = np.zeros(len(result['tag_bboxs']))
         transformed = self.transform(image=result['image'], bboxes=result['tag_bboxs'], category_ids=category_ids)
-        result['image'] = np.rollaxis(transformed['image'], 2, 0)/255
+        result['image'] = torch.tensor(np.rollaxis(transformed['image'], 2, 0)/255)
         result['tag_bboxs'] = torch.tensor(transformed['bboxes'])
-        return result['image'], (result['tag_idxs'], result['tag_bboxs'])
+        result['tag_idxs'] = torch.tensor(result['tag_idxs'])
+        return result['image'].float(), (result['tag_idxs'].float(), result['tag_bboxs'].float())
 
     def read_image(self, img_name):
         image = cv2.imread(self.img_dir + img_name)

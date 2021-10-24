@@ -44,10 +44,10 @@ class TableEDD(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
-    def train_dataloader(self):
-        ptn_dataset = PubTabNet(
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
-            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
-        )
-        return DataLoader(ptn_dataset, batch_size=8, shuffle=True)
+#     def train_dataloader(self):
+#         ptn_dataset = PubTabNet(
+#             '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
+#             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
+#             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
+#         )
+#         return DataLoader(ptn_dataset, batch_size=8, shuffle=True)
