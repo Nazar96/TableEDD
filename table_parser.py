@@ -54,7 +54,7 @@ class TableEDD(pl.LightningModule):
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
         loss = loss_bbox + loss_struct
 
-        self.log_bbox_image(image[0], pred_bbox[0], 15)
+        self.log_bbox_image(image[0], pred_bbox[0])
     
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)

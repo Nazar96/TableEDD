@@ -86,8 +86,19 @@ class PubTabNet(Dataset):
             A.Resize(resize, resize),
         ]
 
+        additional_transforms = [
+            A.InvertImg(p=0.1),
+            A.GaussianBlur(p=0.25),
+            A.RandomToneCurve(),
+            A.ChannelShuffle(),
+            A.Solarize(),
+            A.ColorJitter(),
+            A.MedianBlur(),
+        ]
+
         if transform_list is not None:
             result += transform_list
+        result += additional_transforms
 
         result = A.Compose(
             result,
