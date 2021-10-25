@@ -13,12 +13,8 @@ class PubTabNetLabelEncode:
     def __init__(
             self,
             elem_dict_path,
-            max_elements=1000,
-            pad_sequence=False
     ):
         self.elements = self.load_elements(elem_dict_path)
-        self.max_elements = max_elements
-        self.pad = pad_sequence
         self.dict_elem = {}
         for i, elem in enumerate(self.elements):
             self.dict_elem[elem] = i
@@ -37,33 +33,19 @@ class PubTabNetLabelEncode:
         return result
 
     def get_bbox_for_each_tag(self, data, pad_value):
-        image = data['image']
         bboxs = data['bboxs']
         tag_idxs = data['tag_idxs']
 
-        height, width = image.shape[:2]
         td_idx = self.dict_elem['</td>']
         bbox_idx = 0
         result = []
         for tag_idx in tag_idxs:
             if tag_idx == td_idx:
-                # x0, y0, x1, y1 = bboxs[bbox_idx]
-                # new_bbox = (float(x0, float(y0), float(x1), float(y1))
                 result.append(bboxs[bbox_idx])
                 bbox_idx += 1
             else:
                 result.append(copy(pad_value))
         return result
-
-    def pad_sequence(self, sequence, pad_value):
-        size = len(sequence)
-        if size >= self.max_elements:
-            return sequence[:self.max_elements]
-
-        for _ in range(self.max_elements - size):
-            sequence.append(copy(pad_value))
-
-        return np.asarray(sequence)
 
     def one_hot(self, inputs):
         inputs = np.asarray(inputs)
@@ -76,10 +58,6 @@ class PubTabNetLabelEncode:
         
         data['tag_idxs'] = self.index_encode(data['tokens'])
         data['tag_bboxs'] = self.get_bbox_for_each_tag(data, pad_value)
-
-        if self.pad:
-            data['tag_bboxs'] = self.pad_sequence(data['tag_bboxs'], pad_value)
-            data['tag_idxs'] = self.pad_sequence(data['tag_idxs'], self.dict_elem['eos'])
 
         data['tag_idxs'] = self.one_hot(data['tag_idxs'])
         return data
@@ -97,12 +75,25 @@ class PubTabNet(Dataset):
         with jsonlines.open(annotation_file, 'r') as reader:
             self.labels = list(reader)
         self.img_dir = img_dir
-        self.transform = A.Compose([
-                            A.PadIfNeeded(256, 256, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
-                            A.Resize(512, 512),
-                        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['category_ids']))
+        self.transform = self.init_transform(transform, 256, 512)
         self.target_transform = target_transform
         self.label_encode = PubTabNetLabelEncode(elem_dict_path)
+
+    @staticmethod
+    def init_transform(transform_list, pad=256, resize=256):
+        result = [
+            A.PadIfNeeded(pad, pad, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
+            A.Resize(resize, resize),
+        ]
+
+        if transform_list is not None:
+            result += transform_list
+
+        result = A.Compose(
+            result,
+            bbox_params=A.BboxParams(format='pascal_voc', label_fields=['category_ids'])
+        )
+        return result
 
     def __len__(self):
         return len(self.labels)
