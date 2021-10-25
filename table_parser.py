@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from torchvision.models import mobilenet_v3_small
 
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from architecture.head.TableAttention import TableAttention
 from data.pubtabnet import PubTabNet
@@ -79,7 +79,6 @@ class TableEDD(pl.LightningModule):
         if self.global_step % each_step:
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
-        
 
     @staticmethod
     def table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox):
@@ -94,19 +93,20 @@ class TableEDD(pl.LightningModule):
 
     def configure_callbacks(self):
         checkpoint = ModelCheckpoint(
-            monitor="val_loss",
+            monitor="total_loss/val",
             dirpath="/home/Tekhta/TableEdd/model/",
         )
-        return [checkpoint]
+        lr_monitor = LearningRateMonitor(logging_interval='step')
+        return [checkpoint, lr_monitor]
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        plateau_lr = ReduceLROnPlateau(optimizer)
+        plateau_lr = ReduceLROnPlateau(optimizer, patience=1_000)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": plateau_lr,
-                "monitor": "val_loss",
+                "monitor": "total_loss/train",
                 "frequency": 1,
             }
         }
