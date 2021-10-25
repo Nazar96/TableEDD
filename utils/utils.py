@@ -1,6 +1,7 @@
 import torch
 from copy import copy
 import numpy as np
+import cv2
 
 
 def pad_sequence(sequence, max_elements, pad_value):
@@ -37,3 +38,17 @@ def collate_fn(batch):
     new_img_batch = torch.tensor([t.numpy() for t in img_batch]).to(device)
     batch = (new_img_batch, (new_tag_batch, new_bbox_batch))
     return batch
+
+
+def plot_bbox(image, bbox):
+    tmp_img = image.cpu().detach().numpy()
+    tmp_bbox = bbox.cpu().detach().numpy()
+
+    tmp_img = np.rollaxis(tmp_img, 0, 3)
+    h, w = tmp_img.shape[:2]
+
+    for bbox in tmp_bbox:
+        x0, y0, x1, y1 = bbox
+        x0, y0, x1, y1 = x0 * w, y0 * h, x1 * w, y1 * h
+        tmp_img = cv2.rectangle(tmp_img, (x0, y0), (x1, y1), (255, 0, 0), 1)
+    return tmp_img

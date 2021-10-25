@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from architecture.head.TableAttention import TableAttention
 from data.pubtabnet import PubTabNet
-from utils.utils import collate_fn
+from utils.utils import collate_fn, plot_bbox
 
 
 def remove_layers(model, i):
@@ -53,7 +53,10 @@ class TableEDD(pl.LightningModule):
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
         loss = loss_bbox + loss_struct
-        
+
+        log_bbox_image = plot_bbox(image[0], pred_bbox[0])
+        self.logger.experiment.add_image("bbox_plot", log_bbox_image, self.global_step, dataformats="HW")
+
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
