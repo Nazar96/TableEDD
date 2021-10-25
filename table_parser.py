@@ -80,11 +80,10 @@ class TableEDD(pl.LightningModule):
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
 
-    @staticmethod
-    def table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox):
-        gt_length = gt_struct.shape[1]
-        loss_struct = F.binary_cross_entropy(pred_struct[:, :gt_length], gt_struct)
-        loss_bbox = F.mse_loss(pred_bbox[:, :gt_length], gt_bbox)
+    def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox):
+        seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
+        loss_struct = F.binary_cross_entropy(pred_struct[:, :seq_length], gt_struct[:, :seq_length])
+        loss_bbox = F.mse_loss(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
         return loss_struct, loss_bbox
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
