@@ -85,7 +85,7 @@ class TableEDD(pl.LightningModule):
         return [checkpoint]
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=(self.lr or self.learning_rate))
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         plateau_lr = ReduceLROnPlateau(optimizer)
         return {
             "optimizer": optimizer,
