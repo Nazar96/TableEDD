@@ -52,10 +52,12 @@ class TableEDD(pl.LightningModule):
         pred_struct, pred_bbox = self.forward(image, gt_struct)
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
-        self.log('train bbox loss', loss_bbox, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        self.log('train struct loss', loss_struct, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-
         loss = loss_bbox + loss_struct
+        
+        self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
+        self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
+        self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
+        
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -64,13 +66,18 @@ class TableEDD(pl.LightningModule):
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
         loss = loss_bbox + loss_struct
-        self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
+        self.logger.experiment.add_scalar("struct_loss/val", loss_struct, self.current_epoch)
+        self.logger.experiment.add_scalar("bbox_loss/val", loss_bbox, self.current_epoch)
+        self.logger.experiment.add_scalar("total_loss/val", loss, self.current_epoch)
+        
         return loss
 
     @staticmethod
     def table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox):
-        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
-        loss_bbox = F.mse_loss(pred_bbox, gt_bbox)
+        gt_length = gt_struct.shape[1]
+        loss_struct = F.binary_cross_entropy(pred_struct[:, :gt_length], gt_struct)
+        loss_bbox = F.mse_loss(pred_bbox[:, :gt_length], gt_bbox)
         return loss_struct, loss_bbox
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
@@ -110,4 +117,4 @@ class TableEDD(pl.LightningModule):
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
-        return DataLoader(ptn_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn)
+        return DataLoader(ptn_dataset, batch_size=self.batch_size, collate_fn=collate_fn)

@@ -47,16 +47,14 @@ class TableAttention(nn.Module):
         return loc_preds
 
     def forward(self, input, target=None):
-        device = input.device
-
         input = self.__flatten(input)
         batch_size = input.shape[0]
 
-        hidden = torch.zeros((1, batch_size, self.hidden_size)).to(device)
-        element = torch.zeros(batch_size).to(device)
+        hidden = torch.zeros((1, batch_size, self.hidden_size)).to(self.device)
+        element = torch.zeros(batch_size).to(self.device)
 
         rnn_outputs = []
-        if self.training and target is not None:
+        if target is not None:
             # use_teacher_forcing
             element_ohe = F.one_hot(element.long(), self.elem_num)
             sequence_length = len(target[0])
