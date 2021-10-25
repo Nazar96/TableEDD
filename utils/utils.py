@@ -44,11 +44,12 @@ def plot_bbox(image, bbox):
     tmp_img = image.cpu().detach().numpy()
     tmp_bbox = bbox.cpu().detach().numpy()
 
-    tmp_img = np.rollaxis(tmp_img, 0, 3)
+    tmp_img = np.rollaxis(tmp_img, 0, 3)*255
+    tmp_img = np.ascontiguousarray(tmp_img).astype(np.uint8)
     h, w = tmp_img.shape[:2]
-
     for bbox in tmp_bbox:
         x0, y0, x1, y1 = bbox
-        x0, y0, x1, y1 = x0 * w, y0 * h, x1 * w, y1 * h
+        x0, y0, x1, y1 = int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)
         tmp_img = cv2.rectangle(tmp_img, (x0, y0), (x1, y1), (255, 0, 0), 1)
-    return tmp_img
+    tmp_img = np.rollaxis(tmp_img, 2, 0)/255
+    return torch.tensor(tmp_img)

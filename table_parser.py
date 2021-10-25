@@ -54,9 +54,8 @@ class TableEDD(pl.LightningModule):
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
         loss = loss_bbox + loss_struct
 
-        log_bbox_image = plot_bbox(image[0], pred_bbox[0])
-        self.logger.experiment.add_image("bbox_plot", log_bbox_image, self.global_step, dataformats="HW")
-
+        self.log_bbox_image(image[0], pred_bbox[0], 15)
+    
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
@@ -75,6 +74,12 @@ class TableEDD(pl.LightningModule):
         self.logger.experiment.add_scalar("total_loss/val", loss, self.current_epoch)
         
         return loss
+    
+    def log_bbox_image(self, image, bbox, each_step=50):
+        if self.global_step % each_step:
+            table_image = plot_bbox(image, bbox)
+            self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
+        
 
     @staticmethod
     def table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox):

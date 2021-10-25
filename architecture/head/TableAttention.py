@@ -50,8 +50,8 @@ class TableAttention(nn.Module):
         input = self.__flatten(input)
         batch_size = input.shape[0]
 
-        hidden = torch.zeros((1, batch_size, self.hidden_size)).to(self.device)
-        element = torch.zeros(batch_size).to(self.device)
+        hidden = torch.zeros((1, batch_size, self.hidden_size)).to(input.device)
+        element = torch.zeros(batch_size).to(input.device)
 
         rnn_outputs = []
         if target is not None:
