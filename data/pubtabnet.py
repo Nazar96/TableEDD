@@ -125,12 +125,19 @@ class PubTabNet(Dataset):
         result['image'] = torch.tensor(np.rollaxis(transformed['image'], 2, 0)/255)
         result['tag_bboxs'] = torch.tensor(transformed['bboxes'])
         result['tag_idxs'] = torch.tensor(result['tag_idxs'])
+        result = self.normalize_bbox_coord(result)
+        
         return result['image'].float(), (result['tag_idxs'].float(), result['tag_bboxs'].float())
 
     def read_image(self, img_name):
         image = cv2.imread(self.img_dir + img_name)
         return image
 
+    def normalize_bbox_coord(self, data):
+        data['tag_bboxs'][:, [0, 2]] /= data['image'].shape[1]
+        data['tag_bboxs'][:, [1, 3]] /= data['image'].shape[2]
+        return data
+    
 
 class PubTabNetDataModule(pl.LightningDataModule):
     def __init__(

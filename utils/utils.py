@@ -28,7 +28,7 @@ def collate_fn(batch):
     new_tag_batch[:, :, -1] = 1
 
     new_bbox_batch = torch.zeros(batch_size, max_length, 4).to(device)
-    new_bbox_batch[:, :] = torch.tensor([0., 0., 0.1, 0.1])
+    new_bbox_batch[:, :] = torch.tensor([0., 0., 0., 0.])
     for i in range(batch_size):
         seq_length = len(tag_batch[i])
         new_tag_batch[i, :seq_length] = tag_batch[i]
