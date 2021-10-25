@@ -76,7 +76,7 @@ class TableEDD(pl.LightningModule):
         return loss
     
     def log_bbox_image(self, image, bbox, each_step=50):
-        if self.global_step % each_step:
+        if self.global_step % each_step == 0:
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
 
@@ -116,7 +116,7 @@ class TableEDD(pl.LightningModule):
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
-        return DataLoader(ptn_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn)
+        return DataLoader(ptn_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=64)
 
     def val_dataloader(self):
         ptn_dataset = PubTabNet(
@@ -124,4 +124,4 @@ class TableEDD(pl.LightningModule):
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
-        return DataLoader(ptn_dataset, batch_size=self.batch_size, collate_fn=collate_fn)
+        return DataLoader(ptn_dataset, batch_size=self.batch_size, collate_fn=collate_fn, num_workers=64)

@@ -86,14 +86,17 @@ class PubTabNet(Dataset):
             A.Resize(resize, resize),
         ]
 
+        p = 0.1
         additional_transforms = [
-            A.InvertImg(p=0.1),
-            A.GaussianBlur(p=0.25),
-            A.RandomToneCurve(),
-            A.ChannelShuffle(),
-            A.Solarize(),
-            A.ColorJitter(),
-            A.MedianBlur(),
+            A.InvertImg(p=0.05),
+            A.GaussianBlur(p=p),
+            A.RandomToneCurve(p=p),
+            A.ChannelShuffle(p=p),
+            A.Solarize(p=p),
+            A.ColorJitter(p=p),
+            A.MedianBlur(p=p),
+#             A.RandomShadow(p=p),
+            A.RandomSunFlare(p=p, src_radius=40),
         ]
 
         if transform_list is not None:
@@ -161,10 +164,10 @@ class PubTabNetDataModule(pl.LightningDataModule):
         self.ptn = PubTabNet(self.annotation_file, self.img_dir, self.transform)
 
     def train_dataloader(self):
-        return DataLoader(self.ptn, batch_size=self.batch_size)
+        return DataLoader(self.ptn, batch_size=self.batch_size, num_workers=64)
 
     def val_dataloader(self):
-        return DataLoader(self.ptn, batch_size=self.batch_size)
+        return DataLoader(self.ptn, batch_size=self.batch_size, num_workers=64)
 
     def test_dataloader(self):
         return DataLoader(self.ptn, batch_size=self.batch_size)
