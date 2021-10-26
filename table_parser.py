@@ -26,7 +26,7 @@ class TableEDD(pl.LightningModule):
             max_elem_length=1000,
             pretrained=False,
             batch_size=8,
-            learning_rate=1e-3,
+            learning_rate=1e-4,
     ):
         super().__init__()
         self.batch_size = batch_size
@@ -56,9 +56,9 @@ class TableEDD(pl.LightningModule):
 
         self.log_bbox_image(image[0], pred_bbox[0])
     
-        self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
-        self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
-        self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
+        self.logger.experiment.add_scalar("struct_loss_train", loss_struct, self.global_step)
+        self.logger.experiment.add_scalar("bbox_loss_train", loss_bbox, self.global_step)
+        self.logger.experiment.add_scalar("total_loss_train", loss, self.global_step)
         
         return loss
 
@@ -67,13 +67,12 @@ class TableEDD(pl.LightningModule):
         pred_struct, pred_bbox = self.forward(image)
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
-        loss = loss_bbox + loss_struct
-
-        self.logger.experiment.add_scalar("struct_loss/val", loss_struct, self.current_epoch)
-        self.logger.experiment.add_scalar("bbox_loss/val", loss_bbox, self.current_epoch)
-        self.logger.experiment.add_scalar("total_loss/val", loss, self.current_epoch)
-        
+        loss = loss_bbox + loss_struct        
         return loss
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack(outputs).mean()
+        self.log('val_loss', avg_loss)
     
     def log_bbox_image(self, image, bbox, each_step=50):
         if self.global_step % each_step == 0:
@@ -92,27 +91,27 @@ class TableEDD(pl.LightningModule):
 
     def configure_callbacks(self):
         checkpoint = ModelCheckpoint(
-            monitor="total_loss/val",
-            dirpath="/home/Tekhta/TableEdd/model/",
+            monitor="val_loss",
+            dirpath="/home/Tekhta/TableEDD/model/",
         )
         lr_monitor = LearningRateMonitor(logging_interval='step')
         return [checkpoint, lr_monitor]
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        plateau_lr = ReduceLROnPlateau(optimizer, patience=1_000)
+        plateau_lr = ReduceLROnPlateau(optimizer, patience=100, verbose=True)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": plateau_lr,
-                "monitor": "total_loss/train",
+                "monitor": "val_loss",
                 "frequency": 1,
             }
         }
 
     def train_dataloader(self):
         ptn_dataset = PubTabNet(
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span_100.jsonl',
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
@@ -120,7 +119,7 @@ class TableEDD(pl.LightningModule):
 
     def val_dataloader(self):
         ptn_dataset = PubTabNet(
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span_100.jsonl',
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
