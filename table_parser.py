@@ -2,9 +2,9 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-
 from torch.utils.data import DataLoader
 from torchvision.models import mobilenet_v3_small
+from torchvision.ops import box_iou
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
@@ -52,13 +52,15 @@ class TableEDD(pl.LightningModule):
         pred_struct, pred_bbox = self.forward(image, gt_struct)
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
-        loss = loss_bbox + loss_struct
+        bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)
+        loss = loss_bbox + loss_struct + bbox_inter_reg
 
         self.log_bbox_image(image[0], pred_bbox[0])
     
-        self.logger.experiment.add_scalar("struct_loss_train", loss_struct, self.global_step)
-        self.logger.experiment.add_scalar("bbox_loss_train", loss_bbox, self.global_step)
-        self.logger.experiment.add_scalar("total_loss_train", loss, self.global_step)
+        self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
+        self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
+        self.logger.experiment.add_scalar("intersection_penalty/train", bbox_inter_reg, self.global_step)
+        self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
         self.log('train_loss', loss)
         return loss
 
@@ -67,7 +69,7 @@ class TableEDD(pl.LightningModule):
         pred_struct, pred_bbox = self.forward(image)
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
-        loss = loss_bbox + loss_struct        
+        loss = loss_bbox + loss_struct
         return loss
 
     def validation_epoch_end(self, outputs):
@@ -84,6 +86,14 @@ class TableEDD(pl.LightningModule):
         loss_struct = F.binary_cross_entropy(pred_struct[:, :seq_length], gt_struct[:, :seq_length])
         loss_bbox = F.mse_loss(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
         return loss_struct, loss_bbox
+
+    @staticmethod
+    def bbox_intersection_penalty(bbox):
+        intersection_matrix = box_iou(bbox, bbox)
+        intersection_matrix = torch.tril(intersection_matrix, diagonal=-1)
+        intersection_matrix[intersection_matrix.isnan()] = 0.0
+        score = intersection_matrix.sum()/(intersection_matrix != 0).sum()
+        return score
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         image, _ = batch
