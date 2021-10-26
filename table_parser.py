@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from architecture.head.TableAttention import TableAttention
 from data.pubtabnet import PubTabNet
-from utils.utils import collate_fn, plot_bbox
+from utils.utils import collate_fn, plot_bbox, bbox_overlaps_diou
 
 
 def remove_layers(model, i):
@@ -81,18 +81,24 @@ class TableEDD(pl.LightningModule):
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
 
-    def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox):
+    def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox, bbox_strategy='diou'):
         seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
         loss_struct = F.binary_cross_entropy(pred_struct[:, :seq_length], gt_struct[:, :seq_length])
-        loss_bbox = F.mse_loss(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
+
+        if bbox_strategy is 'diou':
+            loss_bbox = torch.nansum(1.0 - bbox_overlaps_diou(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]))
+        else:
+            loss_bbox = F.mse_loss(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
+
         return loss_struct, loss_bbox
 
     @staticmethod
     def bbox_intersection_penalty(bbox):
-        intersection_matrix = box_iou(bbox, bbox)
-        intersection_matrix = torch.tril(intersection_matrix, diagonal=-1)
-        intersection_matrix[intersection_matrix.isnan()] = 0.0
-        score = intersection_matrix.sum()/(intersection_matrix != 0).sum()
+        bbox = bbox.reshape(-1, bbox.shape[-1])
+        iou_matrix = box_iou(bbox, bbox)
+        iou_matrix = torch.tril(iou_matrix, diagonal=-1)
+        iou_matrix[iou_matrix.isnan()] = 0.0
+        score = iou_matrix.sum()/(iou_matrix != 0).sum()
         return score
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
