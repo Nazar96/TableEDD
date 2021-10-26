@@ -59,7 +59,7 @@ class TableEDD(pl.LightningModule):
         self.logger.experiment.add_scalar("struct_loss_train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss_train", loss_bbox, self.global_step)
         self.logger.experiment.add_scalar("total_loss_train", loss, self.global_step)
-        
+        self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -74,7 +74,7 @@ class TableEDD(pl.LightningModule):
         avg_loss = torch.stack(outputs).mean()
         self.log('val_loss', avg_loss)
     
-    def log_bbox_image(self, image, bbox, each_step=50):
+    def log_bbox_image(self, image, bbox, each_step=10):
         if self.global_step % each_step == 0:
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
@@ -91,20 +91,22 @@ class TableEDD(pl.LightningModule):
 
     def configure_callbacks(self):
         checkpoint = ModelCheckpoint(
-            monitor="val_loss",
+            monitor="train_loss",
             dirpath="/home/Tekhta/TableEDD/model/",
+            every_n_train_steps=1_000,
         )
         lr_monitor = LearningRateMonitor(logging_interval='step')
         return [checkpoint, lr_monitor]
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        plateau_lr = ReduceLROnPlateau(optimizer, patience=100, verbose=True)
+        plateau_lr = ReduceLROnPlateau(optimizer, patience=1000, verbose=True)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": plateau_lr,
-                "monitor": "val_loss",
+                "monitor": "train_loss",
+                'interval': "step",
                 "frequency": 1,
             }
         }
