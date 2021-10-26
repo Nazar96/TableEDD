@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from architecture.head.TableAttention import TableAttention
 from data.pubtabnet import PubTabNet
-from utils.utils import collate_fn, plot_bbox, bbox_overlaps_diou
+from utils.utils import collate_fn, plot_bbox, bbox_overlaps_diou, concat_batch
 
 
 def remove_layers(model, i):
@@ -81,15 +81,31 @@ class TableEDD(pl.LightningModule):
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
 
+    @staticmethod
+    def td_bbox_mse(pred_bbox, gt_bbox, td_idx=4):
+        pred_bbox_td = concat_batch(pred_bbox)[0]
+        gt_bbox_td = concat_batch(gt_bbox)[0]
+
+        pred_td_mask = pred_bbox_td.argmax(dim=1) == td_idx
+        gt_td_mask = gt_bbox_td.argmax(dim=1) == td_idx
+        td_mask = pred_td_mask + gt_td_mask
+
+        pred_bbox_td = torch.unsqueeze(pred_bbox_td[td_mask], dim=1)
+        gt_bbox_td = torch.unsqueeze(gt_bbox_td[td_mask], dim=1)
+        loss_bbox = F.mse_loss(pred_bbox_td, gt_bbox_td)
+        return loss_bbox
+
     def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox, bbox_strategy='mse'):
         seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
-        loss_struct = F.binary_cross_entropy(pred_struct[:, :seq_length], gt_struct[:, :seq_length])
+        pred_struct, gt_struct = pred_struct[:, :seq_length], gt_struct[:, :seq_length]
+        pred_bbox, gt_bbox = pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]
 
+        loss_bbox = self.td_bbox_mse(pred_bbox, gt_bbox)
+
+        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
         if bbox_strategy is 'diou':
-            diou = bbox_overlaps_diou(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
+            diou = bbox_overlaps_diou(pred_bbox, gt_bbox)
             loss_bbox = torch.mean(1.0 - diou)
-        else:
-            loss_bbox = F.mse_loss(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
 
         return loss_struct, loss_bbox
 

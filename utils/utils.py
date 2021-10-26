@@ -98,3 +98,9 @@ def bbox_overlaps_diou(bboxes1, bboxes2):
     if exchange:
         dious = dious.T
     return dious
+
+
+def concat_batch(batch):
+    batch = batch.reshape(-1, batch.shape[-1])
+    torch.unsqueeze(batch, dim=0)
+    return batch
