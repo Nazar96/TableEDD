@@ -47,7 +47,7 @@ class PubTabNetLabelEncode:
                 mask[i] = True
             else:
                 result.append(copy(pad_value))
-        return result, mask
+        return np.asarray(result), mask
 
     def one_hot(self, inputs):
         inputs = np.asarray(inputs)
@@ -130,9 +130,10 @@ class PubTabNet(Dataset):
         category_ids = np.zeros(len(result['tag_bboxs']))
         transformed = self.transform(image=result['image'], bboxes=result['tag_bboxs'], category_ids=category_ids)
         result['image'] = torch.tensor(np.rollaxis(transformed['image'], 2, 0)/255)
-        result = self.normalize_bbox_coord(result)
+
         result['tag_bboxs'] = torch.tensor(transformed['bboxes'])
         result['tag_idxs'] = torch.tensor(result['tag_idxs'])
+        result = self.normalize_bbox_coord(result)
         
         return result['image'].float(), (result['tag_idxs'].float(), result['tag_bboxs'].float())
 
@@ -142,7 +143,7 @@ class PubTabNet(Dataset):
 
     @staticmethod
     def normalize_bbox_coord(data):
-        data['tag_bboxs'][data['bbox_mask']] = 0.0
+        data['tag_bboxs'][~data['bbox_mask']] = 0.0
         data['tag_bboxs'][:, [0, 2]] /= data['image'].shape[1]
         data['tag_bboxs'][:, [1, 3]] /= data['image'].shape[2]
         return data
