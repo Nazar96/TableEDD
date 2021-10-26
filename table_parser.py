@@ -52,14 +52,14 @@ class TableEDD(pl.LightningModule):
         pred_struct, pred_bbox = self.forward(image, gt_struct)
 
         loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
-        bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)
-        loss = loss_bbox + loss_struct + bbox_inter_reg
+#         bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox) * 0.01
+        loss = loss_bbox + loss_struct #+ bbox_inter_reg
 
         self.log_bbox_image(image[0], pred_bbox[0])
     
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
-        self.logger.experiment.add_scalar("intersection_penalty/train", bbox_inter_reg, self.global_step)
+#         self.logger.experiment.add_scalar("intersection_penalty/train", bbox_inter_reg, self.global_step)
         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
         self.log('train_loss', loss)
         return loss
@@ -81,12 +81,13 @@ class TableEDD(pl.LightningModule):
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
 
-    def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox, bbox_strategy='diou'):
+    def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox, bbox_strategy='mse'):
         seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
         loss_struct = F.binary_cross_entropy(pred_struct[:, :seq_length], gt_struct[:, :seq_length])
 
         if bbox_strategy is 'diou':
-            loss_bbox = torch.nansum(1.0 - bbox_overlaps_diou(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]))
+            diou = bbox_overlaps_diou(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
+            loss_bbox = torch.mean(1.0 - diou)
         else:
             loss_bbox = F.mse_loss(pred_bbox[:, :seq_length], gt_bbox[:, :seq_length])
 
@@ -97,7 +98,7 @@ class TableEDD(pl.LightningModule):
         bbox = bbox.reshape(-1, bbox.shape[-1])
         iou_matrix = box_iou(bbox, bbox)
         iou_matrix = torch.tril(iou_matrix, diagonal=-1)
-        iou_matrix[iou_matrix.isnan()] = 0.0
+        iou_matrix = torch.nan_to_num(iou_matrix, 0)
         score = iou_matrix.sum()/(iou_matrix != 0).sum()
         return score
 

@@ -56,6 +56,9 @@ def plot_bbox(image, bbox):
 
 
 def bbox_overlaps_diou(bboxes1, bboxes2):
+    bboxes1 = bboxes1.reshape(-1, bboxes1.shape[-1])
+    bboxes2 = bboxes2.reshape(-1, bboxes2.shape[-1])
+    
     rows = bboxes1.shape[0]
     cols = bboxes2.shape[0]
     dious = torch.zeros((rows, cols))
