@@ -39,13 +39,15 @@ class PubTabNetLabelEncode:
         td_idx = self.dict_elem['</td>']
         bbox_idx = 0
         result = []
-        for tag_idx in tag_idxs:
+        mask = np.zeros(len(tag_idxs), dtype=np.bool)
+        for i, tag_idx in enumerate(tag_idxs):
             if tag_idx == td_idx:
                 result.append(bboxs[bbox_idx])
                 bbox_idx += 1
+                mask[i] = True
             else:
                 result.append(copy(pad_value))
-        return result
+        return result, mask
 
     def one_hot(self, inputs):
         inputs = np.asarray(inputs)
@@ -57,7 +59,7 @@ class PubTabNetLabelEncode:
         pad_value = [0., 0., 0.1, 0.1]
         
         data['tag_idxs'] = self.index_encode(data['tokens'])
-        data['tag_bboxs'] = self.get_bbox_for_each_tag(data, pad_value)
+        data['tag_bboxs'], data['bbox_mask'] = self.get_bbox_for_each_tag(data, pad_value)
 
         data['tag_idxs'] = self.one_hot(data['tag_idxs'])
         return data
@@ -128,9 +130,9 @@ class PubTabNet(Dataset):
         category_ids = np.zeros(len(result['tag_bboxs']))
         transformed = self.transform(image=result['image'], bboxes=result['tag_bboxs'], category_ids=category_ids)
         result['image'] = torch.tensor(np.rollaxis(transformed['image'], 2, 0)/255)
+        result = self.normalize_bbox_coord(result)
         result['tag_bboxs'] = torch.tensor(transformed['bboxes'])
         result['tag_idxs'] = torch.tensor(result['tag_idxs'])
-        result = self.normalize_bbox_coord(result)
         
         return result['image'].float(), (result['tag_idxs'].float(), result['tag_bboxs'].float())
 
@@ -138,7 +140,9 @@ class PubTabNet(Dataset):
         image = cv2.imread(self.img_dir + img_name)
         return image
 
-    def normalize_bbox_coord(self, data):
+    @staticmethod
+    def normalize_bbox_coord(data):
+        data['tag_bboxs'][data['bbox_mask']] = 0.0
         data['tag_bboxs'][:, [0, 2]] /= data['image'].shape[1]
         data['tag_bboxs'][:, [1, 3]] /= data['image'].shape[2]
         return data
