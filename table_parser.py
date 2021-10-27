@@ -51,15 +51,15 @@ class TableEDD(pl.LightningModule):
         image, (gt_struct, gt_bbox) = batch
         pred_struct, pred_bbox = self.forward(image, gt_struct)
 
-        loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
+        loss_struct, loss_bbox, loss_diou = self.table_loss(pred_bbox, pred_struct, gt_bbox, gt_struct)
 #         bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox) * 0.01
-        loss = loss_bbox + loss_struct #+ bbox_inter_reg
+        loss = loss_bbox + loss_struct + loss_diou
 
         self.log_bbox_image(image[0], pred_bbox[0])
     
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
-#         self.logger.experiment.add_scalar("intersection_penalty/train", bbox_inter_reg, self.global_step)
+        self.logger.experiment.add_scalar("diou_loss/train", loss_bbox, self.global_step)
         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
         self.log('train_loss', loss)
         return loss
@@ -68,7 +68,7 @@ class TableEDD(pl.LightningModule):
         image, (gt_struct, gt_bbox) = batch
         pred_struct, pred_bbox = self.forward(image)
 
-        loss_struct, loss_bbox = self.table_loss(pred_struct, pred_bbox, gt_struct, gt_bbox)
+        loss_struct, loss_bbox, diou_loss = self.table_loss(pred_bbox, pred_struct, gt_bbox, gt_struct)
         loss = loss_bbox + loss_struct
         return loss
 
@@ -82,32 +82,41 @@ class TableEDD(pl.LightningModule):
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
 
     @staticmethod
-    def td_bbox_mse(pred_bbox, gt_bbox, td_idx=4):
-        pred_bbox_td = concat_batch(pred_bbox)[0]
+    def filter_td_bbox(pred_bbox, pred_struct, gt_bbox, gt_struct, td_idx=4):
         gt_bbox_td = concat_batch(gt_bbox)[0]
+        pred_bbox_td = concat_batch(pred_bbox)[0]
 
-        pred_td_mask = pred_bbox_td.argmax(dim=1) == td_idx
-        gt_td_mask = gt_bbox_td.argmax(dim=1) == td_idx
+        gt_td_mask = concat_batch(gt_struct)[0].argmax(dim=1) == td_idx
+        pred_td_mask = concat_batch(pred_struct)[0].argmax(dim=1) == td_idx
         td_mask = pred_td_mask + gt_td_mask
 
-        pred_bbox_td = torch.unsqueeze(pred_bbox_td[td_mask], dim=1)
-        gt_bbox_td = torch.unsqueeze(gt_bbox_td[td_mask], dim=1)
-        loss_bbox = F.mse_loss(pred_bbox_td, gt_bbox_td)
-        return loss_bbox
+        gt_bbox_td = torch.unsqueeze(gt_bbox_td[td_mask], dim=0)
+        pred_bbox_td = torch.unsqueeze(pred_bbox_td[td_mask], dim=0)
+        
+        return pred_bbox_td, gt_bbox_td
+    
+    def diou(self, pred_bbox, pred_struct, gt_bbox, gt_struct):
+        loss = []
+        for i in range(len(pred_bbox)):
+            pred_bbox_td, gt_bbox_td = self.filter_td_bbox(pred_bbox[i], pred_struct[i], gt_bbox[i], gt_struct[i])
+            score = (1 - bbox_overlaps_diou(pred_bbox_td[0], gt_bbox_td[0]))
+            loss.append(torch.mean(score))
+        loss = torch.mean(torch.tensor(loss))
+        return loss
+        
 
-    def table_loss(self, pred_struct, pred_bbox, gt_struct, gt_bbox, bbox_strategy='mse'):
+    def table_loss(self, pred_bbox, pred_struct, gt_bbox, gt_struct):
         seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
         pred_struct, gt_struct = pred_struct[:, :seq_length], gt_struct[:, :seq_length]
         pred_bbox, gt_bbox = pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]
 
-        loss_bbox = self.td_bbox_mse(pred_bbox, gt_bbox)
-
+        loss_diou = self.diou(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        
+        pred_bbox_td, gt_bbox_td = self.filter_td_bbox(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        loss_bbox = F.mse_loss(pred_bbox_td, gt_bbox_td)
         loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
-        if bbox_strategy is 'diou':
-            diou = bbox_overlaps_diou(pred_bbox, gt_bbox)
-            loss_bbox = torch.mean(1.0 - diou)
 
-        return loss_struct, loss_bbox
+        return loss_struct, loss_bbox, loss_diou
 
     @staticmethod
     def bbox_intersection_penalty(bbox):
@@ -126,7 +135,7 @@ class TableEDD(pl.LightningModule):
         checkpoint = ModelCheckpoint(
             monitor="train_loss",
             dirpath="/home/Tekhta/TableEDD/model/",
-            every_n_train_steps=1_000,
+            every_n_train_steps=50,
         )
         lr_monitor = LearningRateMonitor(logging_interval='step')
         return [checkpoint, lr_monitor]

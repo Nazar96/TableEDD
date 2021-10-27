@@ -56,9 +56,6 @@ def plot_bbox(image, bbox):
 
 
 def bbox_overlaps_diou(bboxes1, bboxes2):
-    bboxes1 = bboxes1.reshape(-1, bboxes1.shape[-1])
-    bboxes2 = bboxes2.reshape(-1, bboxes2.shape[-1])
-    
     rows = bboxes1.shape[0]
     cols = bboxes2.shape[0]
     dious = torch.zeros((rows, cols))
@@ -94,7 +91,7 @@ def bbox_overlaps_diou(bboxes1, bboxes2):
     outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
     union = area1+area2-inter_area
     dious = inter_area / union - (inter_diag) / outer_diag
-    dious = torch.clamp(dious, min=-1.0, max=1.0)
+    dious = torch.clamp(dious, min=0.0, max=1.0)
     if exchange:
         dious = dious.T
     return dious
@@ -102,5 +99,5 @@ def bbox_overlaps_diou(bboxes1, bboxes2):
 
 def concat_batch(batch):
     batch = batch.reshape(-1, batch.shape[-1])
-    torch.unsqueeze(batch, dim=0)
+    batch = torch.unsqueeze(batch, dim=0)
     return batch
