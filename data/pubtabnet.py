@@ -9,23 +9,23 @@ from copy import copy
 import numpy as np
 
 
+def load_elements(path):
+    with open(path, 'r') as file:
+        data = file.readlines()
+    data = [d.replace('\n', '') for d in data]
+    data = ['sos'] + data + ['eos']
+    return data
+
+
 class PubTabNetLabelEncode:
     def __init__(
             self,
             elem_dict_path,
     ):
-        self.elements = self.load_elements(elem_dict_path)
+        self.elements = load_elements(elem_dict_path)
         self.dict_elem = {}
         for i, elem in enumerate(self.elements):
             self.dict_elem[elem] = i
-
-    @staticmethod
-    def load_elements(path):
-        with open(path, 'r') as file:
-            data = file.readlines()
-        data = [d.replace('\n', '') for d in data]
-        data = ['sos'] + data + ['eos']
-        return data
 
     def index_encode(self, seq):
         _seq = ['sos'] + seq + ['eos']
@@ -97,7 +97,7 @@ class PubTabNet(Dataset):
             A.Solarize(p=p),
             A.ColorJitter(p=p),
             A.MedianBlur(p=p),
-#             A.RandomShadow(p=p),
+            # A.RandomShadow(p=p),
             A.RandomSunFlare(p=p, src_radius=40),
         ]
 
@@ -147,7 +147,52 @@ class PubTabNet(Dataset):
         data['tag_bboxs'][:, [0, 2]] /= data['image'].shape[1]
         data['tag_bboxs'][:, [1, 3]] /= data['image'].shape[2]
         return data
-    
+
+
+class PubTabNetLabelDecoder:
+    def __init__(
+            self,
+            elem_dict_path,
+    ):
+        self.elements = load_elements(elem_dict_path)
+        self.dict_elem = {}
+        for i, elem in enumerate(self.elements):
+            self.dict_elem[elem] = i
+
+    def postprocess(self, struct, bboxs):
+        struct = np.asarray(struct).argmax(axis=1).tolist()
+        bboxs = bboxs.tolist()
+
+        result_bbox = []
+        result_struct = []
+        result_struct_bbox = []
+
+        for tag_idx, bbox in zip(struct, bboxs):
+            tag = self.elements[tag_idx]
+            if tag == '</td>':
+                bbox_tag = str(bbox) + tag
+                result_bbox.append(bbox)
+            if tag == 'sos':
+                continue
+            if tag == 'eos':
+                break
+            result_struct.append(tag)
+            result_struct_bbox.append(bbox_tag)
+        return result_struct, result_bbox, result_struct_bbox
+
+    def __call__(self, struct_batch, bbox_batch):
+        result_struct = []
+        result_bbox = []
+        result_struct_bbox = []
+
+        for struct, bbox in zip(struct_batch, bbox_batch):
+            bbox, struct, struct_bbox = self.postprocess(struct, bbox)
+            struct_bbox = ''.join(struct_bbox)
+            result_struct.append(struct)
+            result_bbox.append(bbox)
+            result_struct_bbox.append(struct_bbox)
+        return result_struct, result_bbox, result_struct_bbox
+
 
 class PubTabNetDataModule(pl.LightningDataModule):
     def __init__(
