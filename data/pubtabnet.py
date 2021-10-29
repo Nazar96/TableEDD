@@ -41,7 +41,7 @@ class PubTabNetLabelEncode:
         result = []
         mask = np.zeros(len(tag_idxs), dtype=np.bool)
         for i, tag_idx in enumerate(tag_idxs):
-            if tag_idx == td_idx:
+            if (tag_idx == td_idx) and (bbox_idx < len(bboxs)):
                 result.append(bboxs[bbox_idx])
                 bbox_idx += 1
                 mask[i] = True
@@ -56,7 +56,7 @@ class PubTabNetLabelEncode:
         return mask 
 
     def __call__(self, data):
-        pad_value = [0., 0., 0.1, 0.1]
+        pad_value = [0., 0., 1., 1.]
         
         data['tag_idxs'] = self.index_encode(data['tokens'])
         data['tag_bboxs'], data['bbox_mask'] = self.get_bbox_for_each_tag(data, pad_value)
@@ -88,9 +88,9 @@ class PubTabNet(Dataset):
             A.Resize(resize, resize),
         ]
 
-        p = 0.1
+        p = 0.05
         additional_transforms = [
-            A.InvertImg(p=0.05),
+            A.InvertImg(p=p),
             A.GaussianBlur(p=p),
             A.RandomToneCurve(p=p),
             A.ChannelShuffle(p=p),
@@ -103,7 +103,7 @@ class PubTabNet(Dataset):
 
         if transform_list is not None:
             result += transform_list
-        result += additional_transforms
+#         result += additional_transforms
 
         result = A.Compose(
             result,
@@ -128,6 +128,7 @@ class PubTabNet(Dataset):
         }
         result = self.label_encode(result)
         category_ids = np.zeros(len(result['tag_bboxs']))
+
         transformed = self.transform(image=result['image'], bboxes=result['tag_bboxs'], category_ids=category_ids)
         result['image'] = torch.tensor(np.rollaxis(transformed['image'], 2, 0)/255)
 
@@ -149,7 +150,7 @@ class PubTabNet(Dataset):
         return data
 
 
-class PubTabNetLabelDecoder:
+class PubTabNetLabelDecode:
     def __init__(
             self,
             elem_dict_path,
@@ -159,7 +160,7 @@ class PubTabNetLabelDecoder:
         for i, elem in enumerate(self.elements):
             self.dict_elem[elem] = i
 
-    def postprocess(self, struct, bboxs):
+    def postprocess(self, struct, bboxs, height, width):
         struct = np.asarray(struct).argmax(axis=1).tolist()
         bboxs = bboxs.tolist()
 
@@ -168,7 +169,13 @@ class PubTabNetLabelDecoder:
         result_struct_bbox = []
 
         for tag_idx, bbox in zip(struct, bboxs):
+            x0, y0, x1, y1 = bbox
+            x0, y0, x1, y1 = int(x0 * width), int(y0 * height), int(x1 * width), int(y1 * height)
+            bbox = [x0, y0, x1, y1]
+            
             tag = self.elements[tag_idx]
+            bbox_tag = self.elements[tag_idx]
+            
             if tag == '</td>':
                 bbox_tag = str(bbox) + tag
                 result_bbox.append(bbox)
@@ -176,17 +183,19 @@ class PubTabNetLabelDecoder:
                 continue
             if tag == 'eos':
                 break
+                
             result_struct.append(tag)
             result_struct_bbox.append(bbox_tag)
         return result_struct, result_bbox, result_struct_bbox
 
-    def __call__(self, struct_batch, bbox_batch):
+    def __call__(self, image_batch, struct_batch, bbox_batch):
         result_struct = []
         result_bbox = []
         result_struct_bbox = []
 
-        for struct, bbox in zip(struct_batch, bbox_batch):
-            bbox, struct, struct_bbox = self.postprocess(struct, bbox)
+        for img, struct, bbox in zip(image_batch, struct_batch, bbox_batch):
+            height, width = img.shape[1:]
+            struct, bbox, struct_bbox = self.postprocess(struct, bbox, height, width)
             struct_bbox = ''.join(struct_bbox)
             result_struct.append(struct)
             result_bbox.append(bbox)

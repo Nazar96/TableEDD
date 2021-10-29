@@ -56,45 +56,72 @@ def plot_bbox(image, bbox):
 
 
 def bbox_overlaps_diou(bboxes1, bboxes2):
+    bboxes1 = torch.sigmoid(bboxes1)
+    bboxes2 = torch.sigmoid(bboxes2)
     rows = bboxes1.shape[0]
     cols = bboxes2.shape[0]
-    dious = torch.zeros((rows, cols))
+    cious = torch.zeros((rows, cols))
     if rows * cols == 0:
-        return dious
+        return cious
     exchange = False
     if bboxes1.shape[0] > bboxes2.shape[0]:
         bboxes1, bboxes2 = bboxes2, bboxes1
-        dious = torch.zeros((cols, rows))
+        cious = torch.zeros((cols, rows))
         exchange = True
-
-    w1 = bboxes1[:, 2] - bboxes1[:, 0]
-    h1 = bboxes1[:, 3] - bboxes1[:, 1]
-    w2 = bboxes2[:, 2] - bboxes2[:, 0]
-    h2 = bboxes2[:, 3] - bboxes2[:, 1]
-
+    w1 = torch.exp(bboxes1[:, 2])
+    h1 = torch.exp(bboxes1[:, 3])
+    w2 = torch.exp(bboxes2[:, 2])
+    h2 = torch.exp(bboxes2[:, 3])
     area1 = w1 * h1
     area2 = w2 * h2
-    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
-    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
-    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
-    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+    center_x1 = bboxes1[:, 0]
+    center_y1 = bboxes1[:, 1]
+    center_x2 = bboxes2[:, 0]
+    center_y2 = bboxes2[:, 1]
 
-    inter_max_xy = torch.min(bboxes1[:, 2:], bboxes2[:, 2:])
-    inter_min_xy = torch.max(bboxes1[:, :2], bboxes2[:, :2])
-    out_max_xy = torch.max(bboxes1[:, 2:], bboxes2[:, 2:])
-    out_min_xy = torch.min(bboxes1[:, :2], bboxes2[:, :2])
+    inter_l = torch.max(center_x1 - w1 / 2,center_x2 - w2 / 2)
+    inter_r = torch.min(center_x1 + w1 / 2,center_x2 + w2 / 2)
+    inter_t = torch.max(center_y1 - h1 / 2,center_y2 - h2 / 2)
+    inter_b = torch.min(center_y1 + h1 / 2,center_y2 + h2 / 2)
+    inter_area = torch.clamp((inter_r - inter_l),min=0) * torch.clamp((inter_b - inter_t),min=0)
 
-    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
-    inter_area = inter[:, 0] * inter[:, 1]
+    c_l = torch.min(center_x1 - w1 / 2,center_x2 - w2 / 2)
+    c_r = torch.max(center_x1 + w1 / 2,center_x2 + w2 / 2)
+    c_t = torch.min(center_y1 - h1 / 2,center_y2 - h2 / 2)
+    c_b = torch.max(center_y1 + h1 / 2,center_y2 + h2 / 2)
+
     inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
-    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
-    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
+    c_diag = torch.clamp((c_r - c_l),min=0)**2 + torch.clamp((c_b - c_t),min=0)**2
+
     union = area1+area2-inter_area
-    dious = inter_area / union - (inter_diag) / outer_diag
-    dious = torch.clamp(dious, min=0.0, max=1.0)
+    u = (inter_diag) / c_diag
+    iou = inter_area / union
+    dious = iou - u
+    dious = torch.clamp(dious,min=-1.0,max = 1.0)
     if exchange:
         dious = dious.T
     return dious
+
+
+def intersect(box_a, box_b):
+    """ We resize both tensors to [A,B,2] without new malloc:
+    [A,2] -> [A,1,2] -> [A,B,2]
+    [B,2] -> [1,B,2] -> [A,B,2]
+    Then we compute the area of intersect between box_a and box_b.
+    Args:
+      box_a: (tensor) bounding boxes, Shape: [n,A,4].
+      box_b: (tensor) bounding boxes, Shape: [n,B,4].
+    Return:
+      (tensor) intersection area, Shape: [n,A,B].
+    """
+    n = box_a.size(0)
+    A = box_a.size(1)
+    B = box_b.size(1)
+    max_xy = torch.min(box_a[:, :, 2:].unsqueeze(2).expand(n, A, B, 2),
+                       box_b[:, :, 2:].unsqueeze(1).expand(n, A, B, 2))
+    min_xy = torch.max(box_a[:, :, :2].unsqueeze(2).expand(n, A, B, 2),
+                       box_b[:, :, :2].unsqueeze(1).expand(n, A, B, 2))
+    return torch.clamp(max_xy - min_xy, min=0).prod(3)  # inter
 
 
 def concat_batch(batch):

@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-from torchvision.models import mobilenet_v3_small
+from torchvision.models import mobilenet_v3_small, mobilenet_v3_large
 from torchvision.ops import box_iou
 
 import pytorch_lightning as pl
@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from architecture.head.TableAttention import TableAttention
 from data.pubtabnet import PubTabNet
-from utils.utils import collate_fn, plot_bbox, bbox_overlaps_diou, concat_batch
+from utils.utils import collate_fn, plot_bbox, bbox_overlaps_diou, concat_batch, intersect
 
 
 def remove_layers(model, i):
@@ -26,21 +26,27 @@ class TableEDD(pl.LightningModule):
             max_elem_length=1000,
             pretrained=False,
             batch_size=8,
-            learning_rate=1e-4,
+            learning_rate=1e-3,
+            backbone_type = "small",
     ):
         super().__init__()
         self.batch_size = batch_size
         self.learning_rate = learning_rate
 
-        self.backbone = remove_layers(mobilenet_v3_small(pretrained=pretrained), 0)
-        attn_in_channels = self.backbone[-1].out_channels
+        if backbone_type is 'large':
+            backbone = mobilenet_v3_large
+        elif backbone_type is 'small':
+            backbone = mobilenet_v3_small
+        self.backbone = remove_layers(backbone(pretrained=pretrained), 0)
+        self.attn_in_channels = self.backbone[-1].out_channels
 
         self.head = TableAttention(
-            attn_in_channels,
+            self.attn_in_channels,
             hidden_size,
             elem_num,
             max_elem_length,
         )
+        self.mse = nn.MSELoss()
 
     def forward(self, input, target=None):
         emb = self.backbone(input)
@@ -51,25 +57,38 @@ class TableEDD(pl.LightningModule):
         image, (gt_struct, gt_bbox) = batch
         pred_struct, pred_bbox = self.forward(image, gt_struct)
 
-        loss_struct, loss_bbox, loss_diou = self.table_loss(pred_bbox, pred_struct, gt_bbox, gt_struct)
-#         bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox) * 0.01
-        loss = loss_bbox + loss_struct + loss_diou
+#         pred_bbox, pred_struct, gt_bbox, gt_struct = self.cut_sequence(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        
+#         pred_td_batch, gt_td_batch = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        loss_diou = self.diou(pred_bbox, gt_bbox)
+#         loss_diou = self.diou(pred_bbox, gt_bbox)
+        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
+        loss_bbox = F.binary_cross_entropy(pred_bbox, gt_bbox) * 0.01
+#         loss_mse = self.mse(pred_bbox, gt_bbox)
+#         bbox_inter_reg = self.bbox_intersection_penalty(pred_td_batch)*0.001
+        bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)*0.0001
+        
+        loss = loss_struct + loss_diou + loss_bbox + bbox_inter_reg
 
         self.log_bbox_image(image[0], pred_bbox[0])
-    
-        self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
-        self.logger.experiment.add_scalar("diou_loss/train", loss_bbox, self.global_step)
-        self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
+        self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
+        self.logger.experiment.add_scalar("diou_loss/train", loss_diou, self.global_step)
+        self.logger.experiment.add_scalar("bbox_inter_reg/train", bbox_inter_reg, self.global_step)
+#         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         image, (gt_struct, gt_bbox) = batch
         pred_struct, pred_bbox = self.forward(image)
+        
+        pred_bbox, pred_struct, gt_bbox, gt_struct = self.cut_sequence(pred_bbox, pred_struct, gt_bbox, gt_struct)
 
-        loss_struct, loss_bbox, diou_loss = self.table_loss(pred_bbox, pred_struct, gt_bbox, gt_struct)
-        loss = loss_bbox + loss_struct
+        pred_td_batch, gt_td_batch = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        loss_diou = self.diou(pred_td_batch, gt_td_batch)
+        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
+        loss = loss_struct + loss_diou
         return loss
 
     def validation_epoch_end(self, outputs):
@@ -80,12 +99,19 @@ class TableEDD(pl.LightningModule):
         if self.global_step % each_step == 0:
             table_image = plot_bbox(image, bbox)
             self.logger.experiment.add_image("bbox_plot", table_image, self.global_step)
+            
+    def cut_sequence(self, pred_bbox, pred_struct, gt_bbox, gt_struct):
+        seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
+        pred_struct, gt_struct = pred_struct[:, :seq_length], gt_struct[:, :seq_length]
+        pred_bbox, gt_bbox = pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]
+        return pred_bbox, pred_struct, gt_bbox, gt_struct
+        
 
     @staticmethod
     def filter_td_bbox(pred_bbox, pred_struct, gt_bbox, gt_struct, td_idx=4):
         gt_bbox_td = concat_batch(gt_bbox)[0]
-        pred_bbox_td = concat_batch(pred_bbox)[0]
-
+        pred_bbox_td = concat_batch(pred_bbox)[0]  
+        
         gt_td_mask = concat_batch(gt_struct)[0].argmax(dim=1) == td_idx
         pred_td_mask = concat_batch(pred_struct)[0].argmax(dim=1) == td_idx
         td_mask = pred_td_mask + gt_td_mask
@@ -95,36 +121,34 @@ class TableEDD(pl.LightningModule):
         
         return pred_bbox_td, gt_bbox_td
     
-    def diou(self, pred_bbox, pred_struct, gt_bbox, gt_struct):
-        loss = []
+    def filter_td_bbox_by_batch(self, pred_bbox, pred_struct, gt_bbox, gt_struct, td_idx=4):
+        pred_batch = []
+        gt_batch = []
         for i in range(len(pred_bbox)):
             pred_bbox_td, gt_bbox_td = self.filter_td_bbox(pred_bbox[i], pred_struct[i], gt_bbox[i], gt_struct[i])
-            score = (1 - bbox_overlaps_diou(pred_bbox_td[0], gt_bbox_td[0]))
+            pred_batch.append(pred_bbox_td[0])
+            gt_batch.append(gt_bbox_td[0])
+        return pred_batch, gt_batch
+    
+    def diou(self, pred_td_batch, gt_td_batch):
+        loss = []
+        for pred_bbox_td, gt_bbox_td in zip(pred_td_batch, gt_td_batch):
+            score = (1 - bbox_overlaps_diou(pred_bbox_td, gt_bbox_td))
             loss.append(torch.mean(score))
         loss = torch.mean(torch.tensor(loss))
         return loss
-        
-
-    def table_loss(self, pred_bbox, pred_struct, gt_bbox, gt_struct):
-        seq_length = min(gt_struct.shape[1], self.head.max_elem_length)
-        pred_struct, gt_struct = pred_struct[:, :seq_length], gt_struct[:, :seq_length]
-        pred_bbox, gt_bbox = pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]
-
-        loss_diou = self.diou(pred_bbox, pred_struct, gt_bbox, gt_struct)
-        
-        pred_bbox_td, gt_bbox_td = self.filter_td_bbox(pred_bbox, pred_struct, gt_bbox, gt_struct)
-        loss_bbox = F.mse_loss(pred_bbox_td, gt_bbox_td)
-        loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
-
-        return loss_struct, loss_bbox, loss_diou
 
     @staticmethod
-    def bbox_intersection_penalty(bbox):
-        bbox = bbox.reshape(-1, bbox.shape[-1])
-        iou_matrix = box_iou(bbox, bbox)
-        iou_matrix = torch.tril(iou_matrix, diagonal=-1)
-        iou_matrix = torch.nan_to_num(iou_matrix, 0)
-        score = iou_matrix.sum()/(iou_matrix != 0).sum()
+    def bbox_intersection_penalty(bbox_batch):
+        score = []
+        for bbox in bbox_batch:
+            bbox = torch.unsqueeze(bbox, dim=0)
+            inter = intersect(bbox, bbox)[0]
+            inter = torch.tril(inter, diagonal=-1)
+            inter = torch.nan_to_num(inter, 0)
+            score.append(inter.sum())
+
+        score = torch.tensor(score).sum()
         return score
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
@@ -142,7 +166,7 @@ class TableEDD(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        plateau_lr = ReduceLROnPlateau(optimizer, patience=1000, verbose=True)
+        plateau_lr = ReduceLROnPlateau(optimizer, patience=5000, verbose=True)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -155,8 +179,8 @@ class TableEDD(pl.LightningModule):
 
     def train_dataloader(self):
         ptn_dataset = PubTabNet(
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span_100.jsonl',
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_train_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/train/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
         return DataLoader(ptn_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=64)
