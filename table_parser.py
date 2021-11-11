@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
 from architecture.head.TableAttention import TableAttention
-from data.pubtabnet import PubTabNet
+from data.black_pubtabnet import PubTabNet
 from utils.utils import collate_fn, plot_bbox, bbox_overlaps_diou, concat_batch, intersect
 
 
@@ -105,7 +105,6 @@ class TableEDD(pl.LightningModule):
         pred_struct, gt_struct = pred_struct[:, :seq_length], gt_struct[:, :seq_length]
         pred_bbox, gt_bbox = pred_bbox[:, :seq_length], gt_bbox[:, :seq_length]
         return pred_bbox, pred_struct, gt_bbox, gt_struct
-        
 
     @staticmethod
     def filter_td_bbox(pred_bbox, pred_struct, gt_bbox, gt_struct, td_idx=4):
@@ -160,7 +159,6 @@ class TableEDD(pl.LightningModule):
             score.append(area)
         score = torch.tensor(score).mean()
         return (1 - score).abs()
-    
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         image, _ = batch
