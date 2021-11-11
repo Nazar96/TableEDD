@@ -42,7 +42,12 @@ class PubTabNetLabelEncode:
         mask = np.zeros(len(tag_idxs), dtype=np.bool)
         for i, tag_idx in enumerate(tag_idxs):
             if (tag_idx == td_idx) and (bbox_idx < len(bboxs)):
-                result.append(bboxs[bbox_idx])
+                bbox = copy(bboxs[bbox_idx])
+                if bbox[0] >= bbox[2]:
+                    bbox[2] = bbox[0]+1
+                if bbox[1] >= bbox[3]:
+                    bbox[3] = bbox[1]+1
+                result.append(bbox)
                 bbox_idx += 1
                 mask[i] = True
             else:
@@ -71,7 +76,7 @@ class PubTabNet(Dataset):
                  img_dir,
                  transform=None,
                  target_transform=None,
-                 elem_dict_path='./utils/dict/table_elements.txt'
+                 elem_dict_path='./utils/dict/table_elements.txt',
     ):
         super().__init__()
         with jsonlines.open(annotation_file, 'r') as reader:
@@ -84,7 +89,7 @@ class PubTabNet(Dataset):
     @staticmethod
     def init_transform(transform_list, pad=256, resize=256):
         result = [
-            A.PadIfNeeded(pad, pad, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
+#             A.PadIfNeeded(pad, pad, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
             A.Resize(resize, resize),
         ]
 
@@ -110,10 +115,7 @@ class PubTabNet(Dataset):
             bbox_params=A.BboxParams(format='pascal_voc', label_fields=['category_ids'])
         )
         return result
-
-    def __len__(self):
-        return len(self.labels)
-
+    
     def __getitem__(self, item):
         data = self.labels[item]
         filename = data['filename']
@@ -135,8 +137,19 @@ class PubTabNet(Dataset):
         result['tag_bboxs'] = torch.tensor(transformed['bboxes'])
         result['tag_idxs'] = torch.tensor(result['tag_idxs'])
         result = self.normalize_bbox_coord(result)
-        
+       
         return result['image'].float(), (result['tag_idxs'].float(), result['tag_bboxs'].float())
+    
+    def prep_image(self, image):
+        bboxs = np.asarray([[0, 0, 1, 1]])
+        category_ids = np.zeros(len(bboxs))
+        
+        transformed = self.transform(image=image, bboxes=bboxs, category_ids=category_ids)
+        image = torch.tensor(np.rollaxis(transformed['image'], 2, 0)/255)
+        return image.float()
+
+    def __len__(self):
+        return len(self.labels)
 
     def read_image(self, img_name):
         image = cv2.imread(self.img_dir + img_name)
@@ -160,7 +173,7 @@ class PubTabNetLabelDecode:
         for i, elem in enumerate(self.elements):
             self.dict_elem[elem] = i
 
-    def postprocess(self, struct, bboxs, height, width):
+    def postprocess(self, struct, bboxs, h, w):
         struct = np.asarray(struct).argmax(axis=1).tolist()
         bboxs = bboxs.tolist()
 
@@ -170,7 +183,7 @@ class PubTabNetLabelDecode:
 
         for tag_idx, bbox in zip(struct, bboxs):
             x0, y0, x1, y1 = bbox
-            x0, y0, x1, y1 = int(x0 * width), int(y0 * height), int(x1 * width), int(y1 * height)
+            x0, y0, x1, y1 = x0 * w, y0 * h, x1 * w, y1 * h
             bbox = [x0, y0, x1, y1]
             
             tag = self.elements[tag_idx]
@@ -194,7 +207,7 @@ class PubTabNetLabelDecode:
         result_struct_bbox = []
 
         for img, struct, bbox in zip(image_batch, struct_batch, bbox_batch):
-            height, width = img.shape[1:]
+            height, width = img.shape[:2]
             struct, bbox, struct_bbox = self.postprocess(struct, bbox, height, width)
             struct_bbox = ''.join(struct_bbox)
             result_struct.append(struct)

@@ -59,22 +59,24 @@ class TableEDD(pl.LightningModule):
 
 #         pred_bbox, pred_struct, gt_bbox, gt_struct = self.cut_sequence(pred_bbox, pred_struct, gt_bbox, gt_struct)
         
-#         pred_td_batch, gt_td_batch = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        pred_td_bbox, gt_td_bbox = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
         loss_diou = self.diou(pred_bbox, gt_bbox)
 #         loss_diou = self.diou(pred_bbox, gt_bbox)
         loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
-        loss_bbox = F.binary_cross_entropy(pred_bbox, gt_bbox) * 0.01
+        loss_bbox = self.mse(pred_bbox, gt_bbox)
 #         loss_mse = self.mse(pred_bbox, gt_bbox)
 #         bbox_inter_reg = self.bbox_intersection_penalty(pred_td_batch)*0.001
-        bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)*0.0001
+        bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)*0.001
+        bbox_area_reg = self.bbox_area_penalty(pred_td_bbox)*0.001
         
-        loss = loss_struct + loss_diou + loss_bbox + bbox_inter_reg
+        loss = loss_struct + loss_diou + loss_bbox + bbox_inter_reg + bbox_area_reg
 
         self.log_bbox_image(image[0], pred_bbox[0])
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("diou_loss/train", loss_diou, self.global_step)
         self.logger.experiment.add_scalar("bbox_inter_reg/train", bbox_inter_reg, self.global_step)
+        self.logger.experiment.add_scalar("bbox_area_reg/train", bbox_area_reg, self.global_step)
 #         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
         self.log('train_loss', loss)
         return loss
@@ -85,8 +87,8 @@ class TableEDD(pl.LightningModule):
         
         pred_bbox, pred_struct, gt_bbox, gt_struct = self.cut_sequence(pred_bbox, pred_struct, gt_bbox, gt_struct)
 
-        pred_td_batch, gt_td_batch = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
-        loss_diou = self.diou(pred_td_batch, gt_td_batch)
+        pred_td_bbox, gt_td_bbox = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        loss_diou = self.diou(pred_td_bbox, gt_td_bbox)
         loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
         loss = loss_struct + loss_diou
         return loss
@@ -148,8 +150,19 @@ class TableEDD(pl.LightningModule):
             inter = torch.nan_to_num(inter, 0)
             score.append(inter.sum())
 
-        score = torch.tensor(score).sum()
+        score = torch.tensor(score).mean()
         return score
+    
+    def bbox_area_penalty(self, bbox_batch):
+        score = []
+        for bbox in bbox_batch:
+            w = (bbox[:,0].min() - bbox[:,2].max()).abs()
+            h = (bbox[:,1].min() - bbox[:,3].max()).abs()
+            area = w * h
+            score.append(area)
+        score = torch.tensor(score).mean()
+        return (1 - score).abs()
+    
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         image, _ = batch
@@ -179,7 +192,7 @@ class TableEDD(pl.LightningModule):
 
     def train_dataloader(self):
         ptn_dataset = PubTabNet(
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_train_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_train_span_span.jsonl',
             '/home/Tekhta/PaddleOCR/data/pubtabnet/train/',
             elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
         )
