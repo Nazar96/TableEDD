@@ -4,6 +4,21 @@ import numpy as np
 import cv2
 
 
+def load_elements(path):
+    with open(path, 'r') as file:
+        data = file.readlines()
+    data = [d.replace('\n', '') for d in data]
+    data = ['sos'] + data + ['eos']
+    return data
+
+
+def ohe(inputs):
+    inputs = np.asarray(inputs)
+    mask = np.zeros((inputs.size, inputs.max()+1))
+    mask[np.arange(inputs.size), inputs] = 1
+    return mask
+
+
 def pad_sequence(sequence, max_elements, pad_value):
     size = len(sequence)
     if size >= max_elements:

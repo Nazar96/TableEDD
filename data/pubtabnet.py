@@ -1,20 +1,11 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
-from torch.nn import functional as F
-import pytorch_lightning as pl
+from torch.utils.data import Dataset
 import albumentations as A
 import jsonlines
 import cv2
 from copy import copy
 import numpy as np
-
-
-def load_elements(path):
-    with open(path, 'r') as file:
-        data = file.readlines()
-    data = [d.replace('\n', '') for d in data]
-    data = ['sos'] + data + ['eos']
-    return data
+from utils.utils import load_elements
 
 
 class PubTabNetLabelEncode:
@@ -89,7 +80,7 @@ class PubTabNet(Dataset):
     @staticmethod
     def init_transform(transform_list, pad=256, resize=256):
         result = [
-#             A.PadIfNeeded(pad, pad, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
+            # A.PadIfNeeded(pad, pad, border_mode=cv2.BORDER_CONSTANT, value=(255, 255, 255), position='top_left'),
             A.Resize(resize, resize),
         ]
 
@@ -214,32 +205,3 @@ class PubTabNetLabelDecode:
             result_bbox.append(bbox)
             result_struct_bbox.append(struct_bbox)
         return result_struct, result_bbox, result_struct_bbox
-
-
-class PubTabNetDataModule(pl.LightningDataModule):
-    def __init__(
-            self,
-            annotation_file,
-            img_dir,
-            batch_size: int = 32
-    ):
-        super().__init__()
-        self.annotation_file = annotation_file
-        self.img_dir = img_dir
-        self.batch_size = batch_size
-        self.transform = None
-
-    def prepare_data(self) -> None:
-        pass
-
-    def setup(self, stage=None):
-        self.ptn = PubTabNet(self.annotation_file, self.img_dir, self.transform)
-
-    def train_dataloader(self):
-        return DataLoader(self.ptn, batch_size=self.batch_size, num_workers=64)
-
-    def val_dataloader(self):
-        return DataLoader(self.ptn, batch_size=self.batch_size, num_workers=64)
-
-    def test_dataloader(self):
-        return DataLoader(self.ptn, batch_size=self.batch_size)
