@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torchvision.models import mobilenet_v3_small, mobilenet_v3_large
-from torchvision.ops import box_iou
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
@@ -54,30 +53,29 @@ class TableEDD(pl.LightningModule):
         return result
 
     def training_step(self, batch, batch_idx):
-        image, (gt_struct, gt_bbox) = batch
-        pred_struct, pred_bbox = self.forward(image, gt_struct)
-
-#         pred_bbox, pred_struct, gt_bbox, gt_struct = self.cut_sequence(pred_bbox, pred_struct, gt_bbox, gt_struct)
+        image, gt_struct, gt_bbox, gt_rows, gt_columns = batch
+        pred_struct, pred_bbox, pred_rows, pred_columns = self.forward(image, gt_struct)
         
         pred_td_bbox, gt_td_bbox = self.filter_td_bbox_by_batch(pred_bbox, pred_struct, gt_bbox, gt_struct)
         loss_diou = self.diou(pred_bbox, gt_bbox)
-#         loss_diou = self.diou(pred_bbox, gt_bbox)
         loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
         loss_bbox = self.mse(pred_bbox, gt_bbox)
-#         loss_mse = self.mse(pred_bbox, gt_bbox)
-#         bbox_inter_reg = self.bbox_intersection_penalty(pred_td_batch)*0.001
+        loss_rows = self.mse(pred_rows, gt_rows)
+        loss_columns = self.mse(pred_columns, gt_columns)
+
         bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)*0.001
         bbox_area_reg = self.bbox_area_penalty(pred_td_bbox)*0.001
         
-        loss = loss_struct + loss_diou + loss_bbox + bbox_inter_reg + bbox_area_reg
+        loss = loss_struct + loss_diou + loss_bbox + loss_rows + loss_columns + bbox_inter_reg + bbox_area_reg
 
         self.log_bbox_image(image[0], pred_bbox[0])
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
         self.logger.experiment.add_scalar("struct_loss/train", loss_struct, self.global_step)
         self.logger.experiment.add_scalar("diou_loss/train", loss_diou, self.global_step)
+        self.logger.experiment.add_scalar("rows_loss/train", loss_rows, self.global_step)
+        self.logger.experiment.add_scalar("columns_loss/train", loss_columns, self.global_step)
         self.logger.experiment.add_scalar("bbox_inter_reg/train", bbox_inter_reg, self.global_step)
         self.logger.experiment.add_scalar("bbox_area_reg/train", bbox_area_reg, self.global_step)
-#         self.logger.experiment.add_scalar("total_loss/train", loss, self.global_step)
         self.log('train_loss', loss)
         return loss
 
