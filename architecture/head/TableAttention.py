@@ -43,13 +43,21 @@ class TableAttention(nn.Module):
         return elements
 
     def generate_structure(self, inputs, rows, columns):
-        inputs = torch.cat([inputs, rows, columns], dim=1)
+        seq_len = inputs.shape[1]
+        rows = rows.unsqueeze(1).repeat(1, seq_len, 1)
+        columns = columns.unsqueeze(1).repeat(1, seq_len, 1)
+
+        inputs = torch.cat([inputs, rows, columns], dim=2)
         structure_probs = self.structure_generator(inputs)
         structure_probs = torch.softmax(structure_probs, dim=2)
         return structure_probs
 
     def generate_loc(self, inputs, rows, columns):
-        inputs = torch.cat([inputs, rows, columns], dim=1)
+        seq_len = inputs.shape[1]
+        rows = rows.unsqueeze(1).repeat(1, seq_len, 1)
+        columns = columns.unsqueeze(1).repeat(1, seq_len, 1)
+
+        inputs = torch.cat([inputs, rows, columns], dim=2)
         loc_preds = self.loc_generator(inputs)
         loc_preds = torch.sigmoid(loc_preds)
         return loc_preds
