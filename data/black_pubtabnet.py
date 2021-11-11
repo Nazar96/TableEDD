@@ -1,5 +1,6 @@
 import jsonlines
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 import cv2
 
@@ -22,7 +23,7 @@ class PubTabNet(Dataset):
 
         self.element_dict = dict()
         for i, elem in enumerate(load_elements(elem_dict_path)):
-            self.element_dict[elem] = i
+            self.element_dict[elem.strip()] = i
 
         self.image_shape = (256, 256)
         self.grid_size = 512
@@ -39,12 +40,17 @@ class PubTabNet(Dataset):
         table = construct_ptn(data, self.image_dir, True)
         struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
 
-        struct_idx = [self.element_dict[tag] for tag in struct]
+        struct_idx = [self.element_dict[tag.strip()] for tag in struct]
         struct_ohe = ohe(struct_idx)
 
         image = self.prepare_image(table)
         bboxes = self.normalize_bbox(table, bboxes)
+        image, struct_ohe, bboxes, rows, columns = self.to_tensor([image, struct_ohe, bboxes, rows, columns])
         return image, struct_ohe, bboxes, rows, columns
+    
+    @staticmethod
+    def to_tensor(elements):
+        return [torch.tensor(el).float() for el in elements]
 
     def prepare_image(self, table):
         return cv2.resize(table.image, self.image_shape)

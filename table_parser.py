@@ -188,9 +188,9 @@ class TableEDD(pl.LightningModule):
 
     def train_dataloader(self):
         ptn_dataset = PubTabNet(
-            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_train_span_span.jsonl',
+            '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_train_span.jsonl',
             '/home/Tekhta/PaddleOCR/data/pubtabnet/train/',
-            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
+            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements_short.txt'
         )
         return DataLoader(ptn_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=64)
 
