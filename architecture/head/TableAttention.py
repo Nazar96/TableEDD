@@ -36,7 +36,8 @@ class TableAttention(nn.Module):
             inputs = torch.transpose(inputs, dim0=1, dim1=2)
         return inputs
 
-    def get_elements(self, inputs):
+    def get_elements(self, inputs, rows, columns):
+        inputs = torch.cat([inputs, rows, columns], dim=1)
         elements_prob = self.structure_generator(inputs)
         elements = elements_prob.argmax(dim=1)
         return elements
@@ -56,11 +57,13 @@ class TableAttention(nn.Module):
     def generate_row(self, inputs):
         vec = inputs.flatten(2)
         row = self.row_generator(vec)
+        row = torch.squeeze(row, dim=1)
         return row
 
     def generate_column(self, inputs):
         vec = inputs.flatten(2)
         column = self.column_generator(vec)
+        column = torch.squeeze(column, dim=1)
         return column
 
     def forward(self, input, target=None):
@@ -91,7 +94,7 @@ class TableAttention(nn.Module):
                 output, hidden, alpha = self.structure_attention(
                     element_ohe, hidden, input
                 )
-                element = self.get_elements(torch.squeeze(output, dim=1)).detach()
+                element = self.get_elements(torch.squeeze(output, dim=1), rows, columns).detach()
                 rnn_outputs.append(output)
 
         rnn_outputs = torch.cat(rnn_outputs, dim=1)
