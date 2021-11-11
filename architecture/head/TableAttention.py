@@ -18,9 +18,14 @@ class TableAttention(nn.Module):
         self.elem_num = elem_num
         self.max_elem_length = max_elem_length
 
+        vector_size = 256
+
         self.structure_attention = AttentionGRU(input_channels, hidden_size, elem_num)
-        self.structure_generator = nn.Linear(hidden_size, self.elem_num)
-        self.loc_generator = nn.Linear(hidden_size, 4)
+        self.structure_generator = nn.Linear(hidden_size+2*vector_size, self.elem_num)
+        self.loc_generator = nn.Linear(hidden_size+2*vector_size, 4)
+
+        self.row_generator = nn.Conv1d(960, 1, kernel_size=1)
+        self.column_generator = nn.Conv1d(960, 1, kernel_size=1)
 
     @staticmethod
     def __flatten(inputs):
@@ -31,22 +36,37 @@ class TableAttention(nn.Module):
             inputs = torch.transpose(inputs, dim0=1, dim1=2)
         return inputs
 
-    def get_elements(self, input):
-        elements_prob = self.structure_generator(input)
+    def get_elements(self, inputs):
+        elements_prob = self.structure_generator(inputs)
         elements = elements_prob.argmax(dim=1)
         return elements
 
-    def generate_structure(self, inputs):
+    def generate_structure(self, inputs, rows, columns):
+        inputs = torch.cat([inputs, rows, columns], dim=1)
         structure_probs = self.structure_generator(inputs)
         structure_probs = torch.softmax(structure_probs, dim=2)
         return structure_probs
 
-    def generate_loc(self, inputs):
+    def generate_loc(self, inputs, rows, columns):
+        inputs = torch.cat([inputs, rows, columns], dim=1)
         loc_preds = self.loc_generator(inputs)
         loc_preds = torch.sigmoid(loc_preds)
         return loc_preds
 
+    def generate_row(self, inputs):
+        vec = inputs.flatten(2)
+        row = self.row_generator(vec)
+        return row
+
+    def generate_column(self, inputs):
+        vec = inputs.flatten(2)
+        column = self.column_generator(vec)
+        return column
+
     def forward(self, input, target=None):
+        rows = self.generate_row(input)
+        columns = self.generate_column(input)
+
         input = self.__flatten(input)
         batch_size = input.shape[0]
 
@@ -75,9 +95,12 @@ class TableAttention(nn.Module):
                 rnn_outputs.append(output)
 
         rnn_outputs = torch.cat(rnn_outputs, dim=1)
-        structure_prob = self.generate_structure(rnn_outputs)
-        loc_pred = self.generate_loc(rnn_outputs)
-        return structure_prob, loc_pred
+        structure_prob = self.generate_structure(rnn_outputs, rows, columns)
+        loc_pred = self.generate_loc(rnn_outputs, rows, columns)
+
+        rows = torch.sigmoid(rows)
+        columns = torch.sigmoid(columns)
+        return structure_prob, loc_pred, rows, columns
 
 
 class AttentionGRU(nn.Module):
