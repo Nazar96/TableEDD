@@ -25,8 +25,8 @@ class PubTabNetBlack(Dataset):
         for i, elem in enumerate(load_elements(elem_dict_path)):
             self.element_dict[elem.strip()] = i
 
-        self.image_shape = (256, 256)
-        self.grid_size = 512
+        self.image_shape = (512, 512)
+        self.grid_size = 256
         self.image_dir = image_dir
 
     def ohe(self, inputs):
