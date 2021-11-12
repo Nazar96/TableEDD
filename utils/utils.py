@@ -29,15 +29,16 @@ def pad_sequence(sequence, max_elements, pad_value):
 
 
 def collate_fn(batch):
-    device = batch[0][0].device
 
     img_batch = [t[0] for t in batch if t is not None]
     tag_batch = [t[1] for t in batch if t is not None]
     bbox_batch = [t[2] for t in batch if t is not None]
     rows_batch = [t[3] for t in batch if t is not None]
     columns_batch = [t[4] for t in batch if t is not None]
+    
+    device = img_batch[0][0].device
 
-    batch_size = len(batch)
+    batch_size = len(img_batch)
     elem_num = tag_batch[0].shape[1]
     max_length = max([t.shape[0] for t in tag_batch])
 
