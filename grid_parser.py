@@ -80,8 +80,8 @@ class TableGridEDD(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        image, (gt_struct, gt_bbox) = batch
-        pred_struct, pred_bbox = self.forward(image)
+        image, gt_struct, gt_bbox, _, _ = batch
+        pred_struct, pred_bbox, _, _ = self.forward(image)
         
         pred_bbox, pred_struct, gt_bbox, gt_struct = self.cut_sequence(pred_bbox, pred_struct, gt_bbox, gt_struct)
 
