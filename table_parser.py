@@ -198,6 +198,6 @@ class TableEDD(pl.LightningModule):
         ptn_dataset = PubTabNet(
             '/home/Tekhta/PaddleOCR/data/pubtabnet/PubTabNet_val_span_100.jsonl',
             '/home/Tekhta/PaddleOCR/data/pubtabnet/val/',
-            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements.txt'
+            elem_dict_path='/home/Tekhta/TableEDD/utils/dict/table_elements_short.txt'
         )
         return DataLoader(ptn_dataset, batch_size=self.batch_size, collate_fn=collate_fn, num_workers=64)

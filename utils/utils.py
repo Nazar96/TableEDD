@@ -8,7 +8,6 @@ def load_elements(path):
     with open(path, 'r') as file:
         data = file.readlines()
     data = [d.replace('\n', '') for d in data]
-    data = ['sos'] + data + ['eos']
     return data
 
 
@@ -33,8 +32,10 @@ def collate_fn(batch):
     device = batch[0][0].device
 
     img_batch = [t[0] for t in batch]
-    tag_batch = [t[1][0] for t in batch]
-    bbox_batch = [t[1][1] for t in batch]
+    tag_batch = [t[1] for t in batch]
+    bbox_batch = [t[2] for t in batch]
+    rows_batch = [t[3] for t in batch]
+    columns_batch = [t[4] for t in batch]
 
     batch_size = len(batch)
     elem_num = tag_batch[0].shape[1]
@@ -51,7 +52,9 @@ def collate_fn(batch):
         new_bbox_batch[i, :seq_length] = bbox_batch[i]
 
     new_img_batch = torch.tensor([t.numpy() for t in img_batch]).to(device)
-    batch = (new_img_batch, (new_tag_batch, new_bbox_batch))
+    new_rows_batch = torch.tensor([t.numpy() for t in rows_batch]).to(device)
+    new_columns_batch = torch.tensor([t.numpy() for t in columns_batch]).to(device)
+    batch = (new_img_batch, new_tag_batch, new_bbox_batch, new_rows_batch, new_columns_batch)
     return batch
 
 

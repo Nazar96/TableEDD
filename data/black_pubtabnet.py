@@ -53,16 +53,19 @@ class PubTabNet(Dataset):
         return [torch.tensor(el).float() for el in elements]
 
     def prepare_image(self, table):
-        return cv2.resize(table.image, self.image_shape)
+        image = table.image
+        image = cv2.resize(image, self.image_shape)
+        image = np.rollaxis(image, 2, 0)/255
+        return image
 
     def __len__(self):
         return len(self.labels)
 
     @staticmethod
     def normalize_bbox(table, bboxes):
-        bboxes = bboxes.copy()
         h, w = table.image.shape[:2]
-
-        bboxes[[0, 2]] /= w
-        bboxes[[1, 3]] /= h
-        return bboxes
+        result = []
+        for bbox in bboxes:
+            x0, y0, x1, y1 = bbox
+            result.append([x0/w, y0/h, x1/w, y0/h])
+        return result
