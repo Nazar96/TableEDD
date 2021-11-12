@@ -6,8 +6,8 @@ import cv2
 
 from sberocr.table_parsing.tools.table_constructor import construct_table_from_pubtabnet as construct_ptn
 from sberocr.table_parsing.tools.table_convertor import convert_table_to_edd_train as convert_edd
+from sberocr.table_parsing.tools.table_modifier import random_table_modification as rand_aug
 from sberocr.utils.html_utils import HTMLTableError
-
 
 from utils.utils import load_elements, ohe
 
@@ -41,12 +41,16 @@ class PubTabNetBlack(Dataset):
         data = self.labels[item]
         try:
             table = construct_ptn(data, self.image_dir, True)
-        except (HTMLTableError, IndexError) as e:
+            struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
+            table = rand_aug(table)
+
+        except HTMLTableError:
             print(f'HTMLTableError in idx: {item}')
             return None
-        try:
-            struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
-        except ValueError as e:
+        except IndexError:
+            print(f'IndexError in idx: {item}')
+            return None
+        except ValueError:
             print(f'ValueError in idx: {item}')
             return None
 
