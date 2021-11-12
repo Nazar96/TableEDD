@@ -10,7 +10,7 @@ from sberocr.table_parsing.tools.table_convertor import convert_table_to_edd_tra
 from utils.utils import load_elements, ohe
 
 
-class PubTabNet(Dataset):
+class PubTabNetBlack(Dataset):
     def __init__(self,
                  annotation_file,
                  image_dir,
