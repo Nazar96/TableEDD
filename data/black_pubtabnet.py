@@ -41,8 +41,8 @@ class PubTabNetBlack(Dataset):
         data = self.labels[item]
         try:
             table = construct_ptn(data, self.image_dir, True)
-            struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
             table = rand_aug(table)
+            struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
 
         except HTMLTableError:
             print(f'HTMLTableError in idx: {item}')

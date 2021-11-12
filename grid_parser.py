@@ -60,13 +60,13 @@ class TableGridEDD(pl.LightningModule):
         loss_diou = self.diou(pred_bbox, gt_bbox)
         loss_struct = F.binary_cross_entropy(pred_struct, gt_struct)
         loss_bbox = self.mse(pred_bbox, gt_bbox)
-        loss_rows = self.mse(pred_rows, gt_rows)
-        loss_columns = self.mse(pred_columns, gt_columns)
+        loss_rows = F.binary_cross_entropy(pred_rows, gt_rows)
+        loss_columns = F.binary_cross_entropy(pred_columns, gt_columns)*1.5
 
-#         bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)*0.001
+        bbox_inter_reg = self.bbox_intersection_penalty(pred_bbox)*0.001
 #         bbox_area_reg = self.bbox_area_penalty(pred_td_bbox)*0.001
         
-        loss = loss_struct + loss_diou + loss_bbox + loss_rows + loss_columns #+ bbox_inter_reg + bbox_area_reg
+        loss = loss_struct + loss_diou + loss_bbox + loss_rows + loss_columns + bbox_inter_reg
 
         self.log_bbox_image(image[0], pred_bbox[0])
         self.logger.experiment.add_scalar("bbox_loss/train", loss_bbox, self.global_step)
@@ -74,7 +74,7 @@ class TableGridEDD(pl.LightningModule):
         self.logger.experiment.add_scalar("diou_loss/train", loss_diou, self.global_step)
         self.logger.experiment.add_scalar("rows_loss/train", loss_rows, self.global_step)
         self.logger.experiment.add_scalar("columns_loss/train", loss_columns, self.global_step)
-#         self.logger.experiment.add_scalar("bbox_inter_reg/train", bbox_inter_reg, self.global_step)
+        self.logger.experiment.add_scalar("bbox_inter_reg/train", bbox_inter_reg, self.global_step)
 #         self.logger.experiment.add_scalar("bbox_area_reg/train", bbox_area_reg, self.global_step)
         self.log('train_loss', loss)
         return loss
