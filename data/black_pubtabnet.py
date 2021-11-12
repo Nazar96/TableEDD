@@ -41,10 +41,14 @@ class PubTabNetBlack(Dataset):
         data = self.labels[item]
         try:
             table = construct_ptn(data, self.image_dir, True)
-        except HTMLTableError:
+        except (HTMLTableError, IndexError) as e:
             print(f'HTMLTableError in idx: {item}')
             return None
-        struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
+        try:
+            struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
+        except ValueError as e:
+            print(f'ValueError in idx: {item}')
+            return None
 
         struct_idx = [self.element_dict[tag.strip()] for tag in struct]
         struct_ohe = ohe(struct_idx)
@@ -73,5 +77,5 @@ class PubTabNetBlack(Dataset):
         result = []
         for bbox in bboxes:
             x0, y0, x1, y1 = bbox
-            result.append([x0/w, y0/h, x1/w, y0/h])
+            result.append([x0/w, y0/h, x1/w, y1/h])
         return result
