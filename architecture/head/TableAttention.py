@@ -88,11 +88,19 @@ class TableAttentionGrid(nn.Module):
         vector_size = 256
 
         self.structure_attention = AttentionGRU(input_channels, hidden_size, elem_num)
-        self.structure_generator = nn.Linear(hidden_size+2*vector_size, self.elem_num)
-        self.loc_generator = nn.Linear(hidden_size+2*vector_size, 4)
 
-        self.row_generator = nn.Conv1d(960, 1, kernel_size=1)
-        self.column_generator = nn.Conv1d(960, 1, kernel_size=1)
+        self.structure_generator = nn.Linear(hidden_size+2*vector_size, self.elem_num)
+
+        self.loc_generator_0 = nn.Linear(hidden_size+2*vector_size, hidden_size)
+        self.loc_generator_1 = nn.Linear(hidden_size, 4)
+
+        self.row_conv = nn.Conv2d(960, 480, kernel_size=(3, 3), padding=1)
+        self.row_generator = nn.Conv1d(480, 1, kernel_size=1)
+
+        self.column_conv = nn.Conv2d(960, 480, kernel_size=(3, 3), padding=1)
+        self.column_generator = nn.Conv1d(480, 1, kernel_size=1)
+
+        self.relu = nn.ReLU()
 
     def get_elements(self, inputs, rows, columns):
         inputs = torch.cat([inputs, rows, columns], dim=1)
@@ -116,19 +124,27 @@ class TableAttentionGrid(nn.Module):
         columns = columns.unsqueeze(1).repeat(1, seq_len, 1)
 
         inputs = torch.cat([inputs, rows, columns], dim=2)
-        loc_preds = self.loc_generator(inputs)
+        loc_preds = self.loc_generator_0(inputs)
+        loc_preds = self.relu(loc_preds)
+        loc_preds = self.loc_generator_1(loc_preds)
         loc_preds = torch.sigmoid(loc_preds)
         return loc_preds
 
     def generate_row(self, inputs):
+        inputs = self.row_conv(inputs)
+        inputs = self.relu(inputs)
         vec = inputs.flatten(2)
         row = self.row_generator(vec)
+        row = self.relu(row)
         row = torch.squeeze(row, dim=1)
         return row
 
     def generate_column(self, inputs):
+        inputs = self.column_conv(inputs)
+        inputs = self.relu(inputs)
         vec = inputs.flatten(2)
         column = self.column_generator(vec)
+        column = self.relu(column)
         column = torch.squeeze(column, dim=1)
         return column
 
