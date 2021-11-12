@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-import numpy as np
+from utils.utils import flatten
 
 
 class TableAttention(nn.Module):
@@ -22,15 +22,6 @@ class TableAttention(nn.Module):
         self.structure_generator = nn.Linear(hidden_size, self.elem_num)
         self.loc_generator = nn.Linear(hidden_size, 4)
 
-    @staticmethod
-    def __flatten(inputs):
-        if len(inputs.shape) != 3:
-            b, c = inputs.shape[0], inputs.shape[1]
-            flatten_size = np.prod(inputs.shape[2:])
-            inputs = torch.reshape(inputs, (b, c, flatten_size))
-            inputs = torch.transpose(inputs, dim0=1, dim1=2)
-        return inputs
-
     def get_elements(self, input):
         elements_prob = self.structure_generator(input)
         elements = elements_prob.argmax(dim=1)
@@ -47,7 +38,7 @@ class TableAttention(nn.Module):
         return loc_preds
 
     def forward(self, input, target=None):
-        input = self.__flatten(input)
+        input = flatten(input)
         batch_size = input.shape[0]
 
         hidden = torch.zeros((1, batch_size, self.hidden_size)).to(input.device)
@@ -103,15 +94,6 @@ class TableAttentionGrid(nn.Module):
         self.row_generator = nn.Conv1d(960, 1, kernel_size=1)
         self.column_generator = nn.Conv1d(960, 1, kernel_size=1)
 
-    @staticmethod
-    def __flatten(inputs):
-        if len(inputs.shape) != 3:
-            b, c = inputs.shape[0], inputs.shape[1]
-            flatten_size = np.prod(inputs.shape[2:])
-            inputs = torch.reshape(inputs, (b, c, flatten_size))
-            inputs = torch.transpose(inputs, dim0=1, dim1=2)
-        return inputs
-
     def get_elements(self, inputs, rows, columns):
         inputs = torch.cat([inputs, rows, columns], dim=1)
         elements_prob = self.structure_generator(inputs)
@@ -154,7 +136,7 @@ class TableAttentionGrid(nn.Module):
         rows = self.generate_row(input)
         columns = self.generate_column(input)
 
-        input = self.__flatten(input)
+        input = flatten(input)
         batch_size = input.shape[0]
 
         hidden = torch.zeros((1, batch_size, self.hidden_size)).to(input.device)

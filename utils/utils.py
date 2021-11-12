@@ -31,11 +31,11 @@ def pad_sequence(sequence, max_elements, pad_value):
 def collate_fn(batch):
     device = batch[0][0].device
 
-    img_batch = [t[0] for t in batch]
-    tag_batch = [t[1] for t in batch]
-    bbox_batch = [t[2] for t in batch]
-    rows_batch = [t[3] for t in batch]
-    columns_batch = [t[4] for t in batch]
+    img_batch = [t[0] for t in batch if t is not None]
+    tag_batch = [t[1] for t in batch if t is not None]
+    bbox_batch = [t[2] for t in batch if t is not None]
+    rows_batch = [t[3] for t in batch if t is not None]
+    columns_batch = [t[4] for t in batch if t is not None]
 
     batch_size = len(batch)
     elem_num = tag_batch[0].shape[1]
@@ -97,25 +97,25 @@ def bbox_overlaps_diou(bboxes1, bboxes2):
     center_x2 = bboxes2[:, 0]
     center_y2 = bboxes2[:, 1]
 
-    inter_l = torch.max(center_x1 - w1 / 2,center_x2 - w2 / 2)
-    inter_r = torch.min(center_x1 + w1 / 2,center_x2 + w2 / 2)
-    inter_t = torch.max(center_y1 - h1 / 2,center_y2 - h2 / 2)
-    inter_b = torch.min(center_y1 + h1 / 2,center_y2 + h2 / 2)
-    inter_area = torch.clamp((inter_r - inter_l),min=0) * torch.clamp((inter_b - inter_t),min=0)
+    inter_l = torch.max(center_x1 - w1 / 2, center_x2 - w2 / 2)
+    inter_r = torch.min(center_x1 + w1 / 2, center_x2 + w2 / 2)
+    inter_t = torch.max(center_y1 - h1 / 2, center_y2 - h2 / 2)
+    inter_b = torch.min(center_y1 + h1 / 2, center_y2 + h2 / 2)
+    inter_area = torch.clamp((inter_r - inter_l), min=0) * torch.clamp((inter_b - inter_t), min=0)
 
-    c_l = torch.min(center_x1 - w1 / 2,center_x2 - w2 / 2)
-    c_r = torch.max(center_x1 + w1 / 2,center_x2 + w2 / 2)
-    c_t = torch.min(center_y1 - h1 / 2,center_y2 - h2 / 2)
-    c_b = torch.max(center_y1 + h1 / 2,center_y2 + h2 / 2)
+    c_l = torch.min(center_x1 - w1 / 2, center_x2 - w2 / 2)
+    c_r = torch.max(center_x1 + w1 / 2, center_x2 + w2 / 2)
+    c_t = torch.min(center_y1 - h1 / 2, center_y2 - h2 / 2)
+    c_b = torch.max(center_y1 + h1 / 2, center_y2 + h2 / 2)
 
     inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
-    c_diag = torch.clamp((c_r - c_l),min=0)**2 + torch.clamp((c_b - c_t),min=0)**2
+    c_diag = torch.clamp((c_r - c_l), min=0)**2 + torch.clamp((c_b - c_t), min=0)**2
 
     union = area1+area2-inter_area
     u = (inter_diag) / c_diag
     iou = inter_area / union
     dious = iou - u
-    dious = torch.clamp(dious,min=-1.0,max = 1.0)
+    dious = torch.clamp(dious, min=-1.0, max=1.0)
     if exchange:
         dious = dious.T
     return dious
@@ -146,3 +146,12 @@ def concat_batch(batch):
     batch = batch.reshape(-1, batch.shape[-1])
     batch = torch.unsqueeze(batch, dim=0)
     return batch
+
+
+def flatten(inputs):
+    if len(inputs.shape) != 3:
+        b, c = inputs.shape[0], inputs.shape[1]
+        flatten_size = np.prod(inputs.shape[2:])
+        inputs = torch.reshape(inputs, (b, c, flatten_size))
+        inputs = torch.transpose(inputs, dim0=1, dim1=2)
+    return inputs

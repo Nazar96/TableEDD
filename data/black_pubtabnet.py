@@ -6,6 +6,8 @@ import cv2
 
 from sberocr.table_parsing.tools.table_constructor import construct_table_from_pubtabnet as construct_ptn
 from sberocr.table_parsing.tools.table_convertor import convert_table_to_edd_train as convert_edd
+from sberocr.utils.html_utils import HTMLTableError
+
 
 from utils.utils import load_elements, ohe
 
@@ -37,7 +39,11 @@ class PubTabNetBlack(Dataset):
 
     def __getitem__(self, item):
         data = self.labels[item]
-        table = construct_ptn(data, self.image_dir, True)
+        try:
+            table = construct_ptn(data, self.image_dir, True)
+        except HTMLTableError:
+            print(f'HTMLTableError in idx: {item}')
+            return None
         struct, bboxes, rows, columns = convert_edd(table, self.grid_size)
 
         struct_idx = [self.element_dict[tag.strip()] for tag in struct]
