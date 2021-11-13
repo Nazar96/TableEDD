@@ -135,7 +135,7 @@ class TableAttentionGrid(nn.Module):
         inputs = self.relu(inputs)
         vec = inputs.flatten(2)
         row = self.row_generator(vec)
-        row = self.relu(row)
+        # row = self.relu(row)
         row = torch.squeeze(row, dim=1)
         return row
 
@@ -144,7 +144,7 @@ class TableAttentionGrid(nn.Module):
         inputs = self.relu(inputs)
         vec = inputs.flatten(2)
         column = self.column_generator(vec)
-        column = self.relu(column)
+        # column = self.relu(column)
         column = torch.squeeze(column, dim=1)
         return column
 
